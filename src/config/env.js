@@ -104,7 +104,12 @@ if (parsed.data.COOKIES_CONTENT && parsed.data.COOKIES_CONTENT.trim()) {
     const fs = require('fs');
     const autoCookiesFile = path.resolve(parsed.data.DOWNLOAD_DIR, 'cookies.txt');
     fs.mkdirSync(path.dirname(autoCookiesFile), { recursive: true });
-    fs.writeFileSync(autoCookiesFile, parsed.data.COOKIES_CONTENT.trim(), { mode: 0o600 });
+    let content = parsed.data.COOKIES_CONTENT.trim();
+    // Handle literal escaped newlines if pasted as single-line string
+    if (content.includes('\\n') && !content.includes('\n')) {
+      content = content.replace(/\\n/g, '\n');
+    }
+    fs.writeFileSync(autoCookiesFile, content, { mode: 0o600 });
     resolvedCookiesPath = autoCookiesFile;
     process.env.COOKIES_PATH = autoCookiesFile;
   } catch (err) {
