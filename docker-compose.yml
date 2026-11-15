@@ -1,0 +1,83 @@
+# Docker Compose — three services that form the complete system
+#
+# ARCHITECTURE:
+# ┌────────────┐       ┌─────────────────────┐       ┌──────────┐
+# │  bot       │──────▶│  telegram-bot-api    │──────▶│ Telegram  │
+# │ (Node.js)  │       │  (local API server)  │       │  Cloud   │
+# └─────┬──────┘       └─────────────────────┘       └──────────┘
+#       │
+#       ▼
+# ┌──────────┐
+# │ postgres │
+# └──────────┘
+
+services:
+  # ── PostgreSQL ──────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ytbot
+      POSTGRES_USER: bot
+      POSTGRES_PASSWORD: bot_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bot -d ytbot"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ── Local Telegram Bot API Server ──────────────────────────
+  # WHY THIS EXISTS:
+  # Telegram's cloud API limits file uploads to 50 MB.
+  # This local server talks directly to Telegram's MTProto protocol,
+  # bypassing the cloud API, raising the limit to 2 GB.
+  #
+  # REQUIRED ENV VARS (from https://my.telegram.org):
+  # - TELEGRAM_API_ID:   Your app's numeric API ID
+  # - TELEGRAM_API_HASH: Your app's API hash (hex string)
+  # These identify your APPLICATION (not your bot). You get them once
+  # by registering an app at my.telegram.org → "API development tools".
+  telegram-bot-api:
+    image: aiogram/telegram-bot-api:latest
+    environment:
+      TELEGRAM_API_ID: ${TELEGRAM_API_ID}
+      TELEGRAM_API_HASH: ${TELEGRAM_API_HASH}
+    ports:
+      - "8081:8081"
+    volumes:
+      - telegram-bot-api-data:/var/lib/telegram-bot-api
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8081/ || exit 0"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ── The Bot ────────────────────────────────────────────────
+  bot:
+    build:
+      context: .
+      args:
+        YTDLP_VERSION: 2025.02.19
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://bot:bot_password@postgres:5432/ytbot?schema=public
+      TELEGRAM_API_BASE_URL: http://telegram-bot-api:8081
+    depends_on:
+      postgres:
+        condition: service_healthy
+      telegram-bot-api:
+        condition: service_healthy
+    volumes:
+      - downloads:/app/downloads
+      # Optional: Mount cookies file if present (read-only for security)
+      # - ./cookies.txt:/app/cookies.txt:ro
+    # Graceful shutdown: Docker sends SIGTERM, our code catches it
+    stop_grace_period: 30s
+
+volumes:
+  pgdata:
+  telegram-bot-api-data:
+  downloads:
