@@ -113,16 +113,21 @@ async function createJob({ userId, url, kind, quality, items }) {
       { maxWait: 15000, timeout: 30000 },
     );
   } catch (err) {
-    // Prisma error code P2002: Unique constraint failed
-    if (err.code === 'P2002') {
-      const active = await prisma.job.findFirst({
-        where: {
-          userId,
-          status: { in: ['QUEUED', 'RUNNING'] },
-        },
-        select: { id: true },
-      });
+    // If unique constraint or transaction conflict occurred, or an active job exists:
+    const active = await prisma.job.findFirst({
+      where: {
+        userId,
+        status: { in: ['QUEUED', 'RUNNING'] },
+      },
+      select: { id: true },
+    });
 
+    if (
+      active ||
+      err.code === 'P2002' ||
+      err.code === 'P2034' ||
+      err.message?.includes('unique_active_job_per_user')
+    ) {
       throw new ActiveJobExistsError('User already has an active job in progress', active?.id);
     }
     throw err;

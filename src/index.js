@@ -27,7 +27,9 @@ async function main() {
     await applyCustomIndexes(prisma);
     logger.info('✅ Connected to PostgreSQL & custom indexes applied');
   } catch (err) {
-    logger.error({ error: err.message }, '❌ Failed to connect to PostgreSQL');
+    // eslint-disable-next-line no-console
+    console.error('❌ Failed to connect to PostgreSQL:', err.message || err);
+    logger.error({ error: err.message, stack: err.stack }, '❌ Failed to connect to PostgreSQL');
     process.exit(1);
   }
 

@@ -25,6 +25,13 @@ function getOptimizedDatabaseUrl() {
 
   try {
     const url = new URL(rawUrl);
+    // Strip channel_binding as it causes TLS negotiation issues with Prisma & Neon connection poolers
+    if (url.searchParams.has('channel_binding')) {
+      url.searchParams.delete('channel_binding');
+    }
+    if (!url.searchParams.has('sslmode')) {
+      url.searchParams.set('sslmode', 'require');
+    }
     if (!url.searchParams.has('connection_limit')) {
       url.searchParams.set('connection_limit', '25');
     }
