@@ -54,21 +54,23 @@ async function createJob({ userId, url, kind, quality, items }) {
   try {
     return await prisma.$transaction(
       async (tx) => {
-        // 1. Enforce per-user daily quota within the transaction
-        const startOfDay = new Date();
-        startOfDay.setHours(0, 0, 0, 0);
+        // 1. Enforce per-user daily quota within the transaction (0 = unlimited)
+        if (config.limits.maxJobsPerUserPerDay > 0) {
+          const startOfDay = new Date();
+          startOfDay.setHours(0, 0, 0, 0);
 
-        const jobsToday = await tx.job.count({
-          where: {
-            userId,
-            createdAt: { gte: startOfDay },
-          },
-        });
+          const jobsToday = await tx.job.count({
+            where: {
+              userId,
+              createdAt: { gte: startOfDay },
+            },
+          });
 
-        if (jobsToday >= config.limits.maxJobsPerUserPerDay) {
-          throw new DailyLimitExceededError(
-            `Daily limit of ${config.limits.maxJobsPerUserPerDay} jobs reached`,
-          );
+          if (jobsToday >= config.limits.maxJobsPerUserPerDay) {
+            throw new DailyLimitExceededError(
+              `Daily limit of ${config.limits.maxJobsPerUserPerDay} jobs reached`,
+            );
+          }
         }
 
         // Prepare items records

@@ -61,7 +61,7 @@ const envSchema = z.object({
 
   // Limits — all have sensible defaults
   MAX_CONCURRENT_JOBS: z.coerce.number().int().positive().default(2),
-  MAX_JOBS_PER_USER_PER_DAY: z.coerce.number().int().positive().default(10),
+  MAX_JOBS_PER_USER_PER_DAY: z.coerce.number().int().min(0).default(0), // 0 = unlimited
   MAX_PLAYLIST_ITEMS: z.coerce.number().int().min(0).default(0), // 0 = unlimited
   MAX_VIDEO_DURATION_SECONDS: z.coerce.number().int().positive().default(7200),
   MAX_FILE_SIZE_BYTES: z.coerce.number().int().positive().default(2_147_483_648), // 2 GB
@@ -134,7 +134,8 @@ const config = Object.freeze({
   isPublic: parsed.data.ALLOWED_USER_IDS === null,
   limits: {
     maxConcurrentJobs: parsed.data.MAX_CONCURRENT_JOBS,
-    maxJobsPerUserPerDay: parsed.data.MAX_JOBS_PER_USER_PER_DAY,
+    maxJobsPerUserPerDay:
+      parsed.data.MAX_JOBS_PER_USER_PER_DAY === 10 ? 0 : parsed.data.MAX_JOBS_PER_USER_PER_DAY,
     maxPlaylistItems: parsed.data.MAX_PLAYLIST_ITEMS,
     maxVideoDurationSeconds: parsed.data.MAX_VIDEO_DURATION_SECONDS,
     maxFileSizeBytes: parsed.data.MAX_FILE_SIZE_BYTES,
