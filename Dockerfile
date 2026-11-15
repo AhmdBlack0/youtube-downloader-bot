@@ -21,7 +21,7 @@ FROM node:20-slim
 #
 # We install yt-dlp via pip pinned to a tested version, but allow overriding
 # at build-time with --build-arg YTDLP_VERSION=<version>.
-ARG YTDLP_VERSION=2025.02.19
+ARG YTDLP_VERSION=2026.10.26
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
@@ -29,7 +29,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     python3 \
     python3-pip \
-    && pip3 install --break-system-packages "yt-dlp==${YTDLP_VERSION}" \
+    && pip3 install --break-system-packages -U "yt-dlp[default]" \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 

@@ -71,6 +71,7 @@ const envSchema = z.object({
 
   // Optional Cookies for yt-dlp authentication
   COOKIES_PATH: z.string().optional(),
+  COOKIES_CONTENT: z.string().optional(),
 
   // Node env
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
@@ -90,6 +91,26 @@ if (!parsed.success) {
   // eslint-disable-next-line no-console
   console.error(parsed.error.format());
   process.exit(1);
+}
+
+// If raw Netscape cookies content was provided via env (e.g. on Railway/Cloud),
+// write it to a local cookies.txt file for yt-dlp to consume seamlessly
+let resolvedCookiesPath = parsed.data.COOKIES_PATH
+  ? path.resolve(parsed.data.COOKIES_PATH)
+  : undefined;
+
+if (parsed.data.COOKIES_CONTENT && parsed.data.COOKIES_CONTENT.trim()) {
+  try {
+    const fs = require('fs');
+    const autoCookiesFile = path.resolve(parsed.data.DOWNLOAD_DIR, 'cookies.txt');
+    fs.mkdirSync(path.dirname(autoCookiesFile), { recursive: true });
+    fs.writeFileSync(autoCookiesFile, parsed.data.COOKIES_CONTENT.trim(), { mode: 0o600 });
+    resolvedCookiesPath = autoCookiesFile;
+    process.env.COOKIES_PATH = autoCookiesFile;
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('⚠️ Failed to save COOKIES_CONTENT to file:', err.message);
+  }
 }
 
 const config = Object.freeze({
@@ -116,7 +137,7 @@ const config = Object.freeze({
     minDiskSpaceBytes: parsed.data.MIN_DISK_SPACE_BYTES,
   },
   downloadDir: path.resolve(parsed.data.DOWNLOAD_DIR),
-  cookiesPath: parsed.data.COOKIES_PATH ? path.resolve(parsed.data.COOKIES_PATH) : undefined,
+  cookiesPath: resolvedCookiesPath,
   nodeEnv: parsed.data.NODE_ENV,
 });
 

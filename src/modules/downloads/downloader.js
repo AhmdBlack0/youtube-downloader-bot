@@ -63,6 +63,8 @@ function buildDownloadArgs(quality, jobDir, targetUrl, options = {}) {
   const commonArgs = [
     '--no-check-certificates',
     '--no-warnings',
+    '--extractor-args',
+    'youtube:player-client=ios,android,web',
     '--js-runtimes',
     'node',
     '--remote-components',
