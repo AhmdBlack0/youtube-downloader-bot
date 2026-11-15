@@ -4,6 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "start": "node src/index.js",
     "test": "jest",
     "lint": "eslint src/ tests/",
     "format:check": "prettier --check \"src/**/*.js\" \"tests/**/*.js\"",
