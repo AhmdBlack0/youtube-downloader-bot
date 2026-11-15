@@ -65,7 +65,7 @@ jobs:
           DATABASE_URL: postgresql://bot:bot_password@localhost:5432/ytbot?schema=public
           BOT_TOKEN: 123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
           ALLOWED_USER_IDS: 123456789,987654321
-        run: npm test
+        run: npm test -- --runInBand
 
   build-docker:
     name: Build Docker Image

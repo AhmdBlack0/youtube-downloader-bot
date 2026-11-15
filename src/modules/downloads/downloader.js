@@ -263,7 +263,9 @@ async function downloadVideo({
           const files = await fs.promises.readdir(jobDir);
           const mediaFile = files.find((f) => f.endsWith('.mp4') || f.endsWith('.mp3'));
           if (!mediaFile) {
-            reject(new YtDlpError('Downloaded media file not found in job directory', 'FILE_NOT_FOUND'));
+            reject(
+              new YtDlpError('Downloaded media file not found in job directory', 'FILE_NOT_FOUND'),
+            );
             return;
           }
           filePath = path.join(jobDir, mediaFile);
@@ -298,7 +300,9 @@ async function downloadVideo({
           requestedQuality: quality,
         });
       } catch (err) {
-        reject(new YtDlpError(`Error inspecting downloaded file: ${err.message}`, 'INSPECTION_ERROR'));
+        reject(
+          new YtDlpError(`Error inspecting downloaded file: ${err.message}`, 'INSPECTION_ERROR'),
+        );
       }
     });
   });
