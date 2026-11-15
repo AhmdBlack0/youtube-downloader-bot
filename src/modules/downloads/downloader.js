@@ -1,0 +1,311 @@
+// @ts-check
+
+/*
+ * VIDEO DOWNLOAD ENGINE
+ * ---------------------
+ * Handles single video or audio downloads with format selectors, fallbacks,
+ * real-time progress parsing, thumbnail extraction, and process tree lifecycle.
+ */
+
+const { spawn, exec } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+const { logger } = require('../../config/logger');
+const { resolveYtDlpBinary, YtDlpError, classifyYtDlpError } = require('./ytdlp');
+
+function getDefaultCookiesPath() {
+  return process.env.COOKIES_PATH ? path.resolve(process.env.COOKIES_PATH) : undefined;
+}
+
+/**
+ * Kill a process and all its child sub-processes (e.g. ffmpeg) cleanly.
+ *
+ * @param {import('child_process').ChildProcess} child
+ */
+function killProcessTree(child) {
+  if (!child || !child.pid) return;
+
+  try {
+    if (process.platform === 'win32') {
+      // Windows: taskkill /T kills process tree, /F forces termination
+      exec(`taskkill /pid ${child.pid} /T /F`, () => {});
+    } else {
+      // Unix: send SIGKILL to the process group or process directly
+      try {
+        process.kill(-child.pid, 'SIGKILL');
+      } catch {
+        child.kill('SIGKILL');
+      }
+    }
+  } catch {
+    try {
+      child.kill('SIGKILL');
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+/**
+ * Build yt-dlp arguments for video or audio download.
+ *
+ * @param {string} quality '360'|'480'|'720'|'1080'|'mp3'
+ * @param {string} jobDir Output directory for this specific job
+ * @param {string} targetUrl Sanitized canonical URL
+ * @param {Object} [options]
+ * @param {string} [options.cookiesPath] Optional cookies file path
+ * @returns {string[]}
+ */
+function buildDownloadArgs(quality, jobDir, targetUrl, options = {}) {
+  const outputTemplate = path.join(jobDir, '%(id)s.%(ext)s');
+  const cookies = options.cookiesPath || getDefaultCookiesPath();
+
+  const commonArgs = [
+    '--no-check-certificates',
+    '--no-warnings',
+    '--js-runtimes',
+    'node',
+    '--remote-components',
+    'ejs:github',
+    '--concurrent-fragments',
+    '5', // Multi-connection parallel chunk downloading for faster speeds
+    '--buffer-size',
+    '16M',
+    '--progress',
+    '--newline',
+    '--progress-template',
+    'PROGRESS:%(progress._percent_str)s|%(progress._speed_str)s|%(progress._eta_str)s',
+    '--print',
+    'after_move:FINAL:%(filepath)s|%(height)s|%(width)s|%(duration)s',
+    '-o',
+    outputTemplate,
+  ];
+
+  if (cookies && fs.existsSync(cookies)) {
+    commonArgs.push('--cookies', cookies);
+  }
+
+  if (quality === 'mp3') {
+    return [
+      ...commonArgs,
+      '-x', // Extract audio track
+      '--audio-format',
+      'mp3', // Convert to MP3 container/codec
+      '--audio-quality',
+      '128K', // Optimal 128 kbps for clear sound, small file size, and fast uploads
+      '--',
+      targetUrl,
+    ];
+  }
+
+  const height = parseInt(quality, 10);
+  // Format selector with cascade fallback:
+  // 1. Pre-merged single stream MP4 at or below requested height (fastest, no ffmpeg muxing step)
+  // 2. Best video at or below requested height + best audio (merged to mp4)
+  // 3. Best single stream available below that
+  const formatSelector = `b[height<=${height}][ext=mp4]/bv*[height<=${height}]+ba/b[height<=${height}]/b`;
+
+  return [
+    ...commonArgs,
+    '-f',
+    formatSelector,
+    '--merge-output-format',
+    'mp4', // Ensure final combined output is always standard MP4
+    '--write-thumbnail', // Download video thumbnail
+    '--convert-thumbnails',
+    'jpg', // Convert thumbnail to JPG for Telegram
+    '--',
+    targetUrl,
+  ];
+}
+
+/**
+ * Download a video or audio file with progress notifications.
+ *
+ * @param {Object} params
+ * @param {string} params.url Sanitized YouTube URL
+ * @param {'360'|'480'|'720'|'1080'|'mp3'} params.quality
+ * @param {string} params.jobDir Directory dedicated to this job
+ * @param {(progress: { percent: number, speed: string, eta: string }) => void} [params.onProgress]
+ * @param {number} [params.timeoutMs=1800000] 30 min default timeout
+ * @param {string} [params.binaryPath]
+ * @param {{ isCancelled: boolean }} [params.cancelToken]
+ * @returns {Promise<{
+ *   filePath: string,
+ *   thumbnailPath: string|null,
+ *   fileSizeBytes: number,
+ *   actualHeight: number|null,
+ *   actualWidth: number|null,
+ *   actualDuration: number|null,
+ *   isFallback: boolean,
+ *   requestedQuality: string
+ * }>}
+ */
+async function downloadVideo({
+  url,
+  quality,
+  jobDir,
+  onProgress,
+  timeoutMs = 1800000,
+  binaryPath,
+  cancelToken,
+  cookiesPath,
+}) {
+  const binary = binaryPath || resolveYtDlpBinary();
+  const rawArgs = buildDownloadArgs(quality, jobDir, url, { cookiesPath });
+
+  let spawnCmd = binary;
+  let args = rawArgs;
+
+  if (Array.isArray(binary)) {
+    spawnCmd = binary[0];
+    args = [...binary.slice(1), ...rawArgs];
+  }
+
+  logger.info({ quality, jobDir, url }, 'Starting downloadVideo');
+
+  return new Promise((resolve, reject) => {
+    let finalOutputLine = '';
+    let stderrData = '';
+    let isSettled = false;
+
+    const child = spawn(spawnCmd, args, {
+      shell: false,
+      windowsHide: true,
+    });
+
+    // Timeout guard
+    const timer = setTimeout(() => {
+      if (!isSettled) {
+        isSettled = true;
+        killProcessTree(child);
+        reject(new YtDlpError(`Download timed out after ${timeoutMs}ms`, 'TIMEOUT'));
+      }
+    }, timeoutMs);
+
+    // Cancellation check interval
+    let cancelChecker = null;
+    if (cancelToken) {
+      cancelChecker = setInterval(() => {
+        if (cancelToken.isCancelled && !isSettled) {
+          isSettled = true;
+          clearInterval(cancelChecker);
+          clearTimeout(timer);
+          killProcessTree(child);
+          reject(new YtDlpError('Download was cancelled by user', 'CANCELLED'));
+        }
+      }, 100);
+    }
+
+    child.stdout.on('data', (chunk) => {
+      const text = chunk.toString();
+      const lines = text.split(/\r?\n/);
+
+      for (const line of lines) {
+        if (line.startsWith('FINAL:')) {
+          finalOutputLine = line.replace('FINAL:', '').trim();
+          continue;
+        }
+
+        if (line.startsWith('PROGRESS:') && onProgress) {
+          const parts = line.replace('PROGRESS:', '').split('|');
+          const percentStr = parts[0]?.replace('%', '').trim();
+          const speed = parts[1]?.trim() || '';
+          const eta = parts[2]?.trim() || '';
+          const percent = parseFloat(percentStr) || 0;
+
+          onProgress({ percent, speed, eta });
+        }
+      }
+    });
+
+    child.stderr.on('data', (chunk) => {
+      stderrData += chunk.toString();
+    });
+
+    child.on('error', (err) => {
+      if (isSettled) return;
+      isSettled = true;
+      clearTimeout(timer);
+      if (cancelChecker) clearInterval(cancelChecker);
+      reject(new YtDlpError(`Failed to spawn download process: ${err.message}`, 'SPAWN_ERROR'));
+    });
+
+    child.on('close', async (code) => {
+      if (isSettled) return;
+      isSettled = true;
+      clearTimeout(timer);
+      if (cancelChecker) clearInterval(cancelChecker);
+
+      if (code !== 0) {
+        const classified = classifyYtDlpError(stderrData);
+        reject(new YtDlpError(classified.message, classified.code, stderrData));
+        return;
+      }
+
+      try {
+        // Parse final metadata printed by after_move:FINAL:filepath|height|width|duration
+        let filePath = '';
+        let actualHeight = null;
+        let actualWidth = null;
+        let actualDuration = null;
+
+        if (finalOutputLine) {
+          const [fPath, hStr, wStr, dStr] = finalOutputLine.split('|');
+          filePath = fPath?.trim() || '';
+          actualHeight = hStr && hStr !== 'NA' ? parseInt(hStr, 10) : null;
+          actualWidth = wStr && wStr !== 'NA' ? parseInt(wStr, 10) : null;
+          actualDuration = dStr && dStr !== 'NA' ? parseInt(dStr, 10) : null;
+        }
+
+        // If after_move wasn't captured or file path empty, search jobDir for the media file
+        if (!filePath || !fs.existsSync(filePath)) {
+          const files = await fs.promises.readdir(jobDir);
+          const mediaFile = files.find((f) => f.endsWith('.mp4') || f.endsWith('.mp3'));
+          if (!mediaFile) {
+            reject(new YtDlpError('Downloaded media file not found in job directory', 'FILE_NOT_FOUND'));
+            return;
+          }
+          filePath = path.join(jobDir, mediaFile);
+        }
+
+        const stat = await fs.promises.stat(filePath);
+
+        // Find thumbnail if generated
+        let thumbnailPath = null;
+        const potentialThumb = filePath.replace(/\.(mp4|mp3)$/, '.jpg');
+        if (fs.existsSync(potentialThumb)) {
+          thumbnailPath = potentialThumb;
+        }
+
+        // Detect fallback: user asked for e.g. 1080p, but actual height is <= 720p
+        let isFallback = false;
+        if (quality !== 'mp3' && actualHeight) {
+          const requestedHeight = parseInt(quality, 10);
+          if (actualHeight < requestedHeight) {
+            isFallback = true;
+          }
+        }
+
+        resolve({
+          filePath,
+          thumbnailPath,
+          fileSizeBytes: stat.size,
+          actualHeight,
+          actualWidth,
+          actualDuration,
+          isFallback,
+          requestedQuality: quality,
+        });
+      } catch (err) {
+        reject(new YtDlpError(`Error inspecting downloaded file: ${err.message}`, 'INSPECTION_ERROR'));
+      }
+    });
+  });
+}
+
+module.exports = {
+  downloadVideo,
+  buildDownloadArgs,
+  killProcessTree,
+};
