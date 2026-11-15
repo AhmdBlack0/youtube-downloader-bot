@@ -34,8 +34,10 @@ async function main() {
   }
 
   // 1b. Check & log yt-dlp version on startup
+  const fs = require('fs');
   const ytDlpVersion = await getYtDlpVersion();
-  logger.info({ ytDlpVersion }, '🎬 yt-dlp initialized');
+  const cookiesConfigured = !!(config.cookiesPath && fs.existsSync(config.cookiesPath));
+  logger.info({ ytDlpVersion, cookiesConfigured }, '🎬 yt-dlp initialized');
 
   // 2. Create the Telegram bot instance
   const bot = createBot();
