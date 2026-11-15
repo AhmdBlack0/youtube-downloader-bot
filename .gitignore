@@ -1,7 +1,7 @@
 node_modules/
 .env
 dist/
-downloads/
+/downloads/
 scratch/
 tmp/
 *.log
