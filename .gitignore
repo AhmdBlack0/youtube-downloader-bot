@@ -1,0 +1,22 @@
+node_modules/
+.env
+dist/
+downloads/
+scratch/
+tmp/
+*.log
+coverage/
+*.mp4
+*.mp3
+*.webp
+*.part
+.DS_Store
+Thumbs.db
+
+# Secrets & Credentials (NEVER COMMIT)
+cookies.txt
+*.cookies
+cookies/
+secrets/
+*.pem
+*.key

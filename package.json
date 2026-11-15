@@ -1,0 +1,36 @@
+{
+  "name": "youtube-downloader-bot",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "jest",
+    "lint": "eslint src/ tests/",
+    "format:check": "prettier --check \"src/**/*.js\" \"tests/**/*.js\"",
+    "format": "prettier --write \"src/**/*.js\" \"tests/**/*.js\"",
+    "prisma:generate": "prisma generate",
+    "update:ytdlp": "yt-dlp -U",
+    "dev": "nodemon src/index.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@grammyjs/auto-retry": "^2.0.2",
+    "dotenv": "^18.0.10",
+    "grammy": "^1.46.0",
+    "pino": "^10.4.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@prisma/client": "^6.19.3",
+    "eslint": "^10.15.0",
+    "jest": "^30.5.2",
+    "nodemon": "^3.1.14",
+    "pino-pretty": "^13.2.0",
+    "prettier": "^3.10.1",
+    "prisma": "^6.19.3"
+  }
+}

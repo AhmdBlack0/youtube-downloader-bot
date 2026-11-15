@@ -1,0 +1,132 @@
+// This is your Prisma schema file.
+// Learn more: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Registered bot user — one row per Telegram user who has interacted with the bot.
+///
+/// WHY BigInt FOR telegramId?
+/// --------------------------
+/// Telegram user IDs are 64-bit integers. PostgreSQL's `BigInt` maps to 8 bytes
+/// (range up to ~9.2 × 10^18). Prisma maps this to JavaScript's `BigInt` type.
+///
+/// THE SERIALIZATION GOTCHA:
+/// JSON.stringify(123n) throws TypeError. So whenever you send a BigInt to the
+/// Telegram API or log it, you must call .toString() first. We handle this:
+/// - In the logger: custom formatter converts BigInt → string automatically
+/// - In bot handlers: explicit .toString() when building messages
+/// - In Prisma queries: Prisma handles BigInt ↔ PostgreSQL int8 transparently
+model User {
+  id         Int      @id @default(autoincrement())
+  telegramId BigInt   @unique
+  username   String?
+  firstName  String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  jobs           Job[]
+  pendingChoices PendingChoice[]
+}
+
+/// Temporary record holding metadata while the user chooses a quality option.
+///
+/// WHY A SEPARATE MODEL?
+/// Telegram's callback_data limit is strictly 64 bytes. A YouTube URL alone
+/// can easily exceed this limit. We generate an 8-byte random hex token (16 chars),
+/// store the URL and metadata in the database, and send `q:<token>:<quality>`
+/// in the inline button callback (takes ~22 bytes).
+model PendingChoice {
+  id        String   @id /// 16-char random hex token
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  url       String
+  kind      JobKind
+  title       String?
+  duration    Int?     /// in seconds
+  itemCount   Int?     /// for playlists
+  entriesJson String?  /// JSON serialized playlist entries
+  createdAt   DateTime @default(now())
+  expiresAt DateTime
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+/// A download job — one per user request (video or playlist).
+///
+/// STATUS TRANSITIONS (enforced in application code, later phases):
+///   QUEUED → RUNNING → DONE | FAILED | CANCELLED
+///
+/// These are the ONLY valid transitions. A job can never go from DONE → RUNNING,
+/// for example. This is a state machine, and we'll enforce it atomically.
+///
+/// WHY updatedAt?
+/// On restart, any job still in RUNNING with an old updatedAt is considered
+/// "stuck" (the process died mid-work). We use this as a heartbeat.
+model Job {
+  id        Int       @id @default(autoincrement())
+  user      User      @relation(fields: [userId], references: [id])
+  userId    Int
+  url       String
+  kind      JobKind
+  quality   String
+  status    JobStatus @default(QUEUED)
+  error     String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  items     JobItem[]
+
+  /// Partial unique index is added via raw SQL migration (see below).
+  /// It enforces: max 1 active (QUEUED or RUNNING) job per user at the DB level.
+  @@index([userId, status])
+  @@index([status])
+}
+
+/// One item in a playlist job (or the single item in a video job).
+///
+/// WHY a separate model even for single videos?
+/// Uniform handling. The worker loop always iterates over JobItems.
+/// A single-video job just has one JobItem. This avoids if/else branching
+/// throughout the codebase ("is it a playlist or a video?").
+model JobItem {
+  id            Int           @id @default(autoincrement())
+  job           Job           @relation(fields: [jobId], references: [id])
+  jobId         Int
+  index         Int           /// Position in playlist (0-based)
+  title         String?
+  videoUrl      String?
+  status        JobItemStatus @default(PENDING)
+  error         String?
+  fileSizeBytes BigInt?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@unique([jobId, index])
+}
+
+enum JobKind {
+  VIDEO
+  PLAYLIST
+}
+
+enum JobStatus {
+  QUEUED
+  RUNNING
+  DONE
+  FAILED
+  CANCELLED
+}
+
+enum JobItemStatus {
+  PENDING
+  DOWNLOADING
+  DONE
+  FAILED
+  SKIPPED
+}
