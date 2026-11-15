@@ -41,7 +41,7 @@ describe('Downloader Engine (downloader.js)', () => {
       expect(args).toContain('--audio-format');
       expect(args).toContain('mp3');
       expect(args).toContain('--audio-quality');
-      expect(args).toContain('128K');
+      expect(args).toContain('64K');
 
       const dashDashIndex = args.indexOf('--');
       expect(dashDashIndex).toBeGreaterThan(-1);

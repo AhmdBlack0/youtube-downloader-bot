@@ -8,6 +8,7 @@
  */
 
 const { InputFile } = require('grammy');
+const { execFile } = require('child_process');
 const { config, logger } = require('./config');
 const { createBot } = require('./bot');
 const { prisma, applyCustomIndexes } = require('./modules/db');
@@ -15,6 +16,42 @@ const { Worker } = require('./worker');
 const { getYtDlpVersion } = require('./modules/downloads/ytdlp');
 const { escapeMarkdown } = require('./bot/handlers/url');
 const { formatBytes } = require('./utils/format');
+
+/**
+ * Re-encode oversized audio using FFmpeg to guarantee it fits under Telegram's 50 MB cloud Bot API limit.
+ * @param {string} inputPath
+ * @param {number} currentSizeBytes
+ * @param {number} [durationSeconds]
+ * @returns {Promise<string>}
+ */
+async function compressAudioToFitTelegram(inputPath, currentSizeBytes, durationSeconds) {
+  const targetBytes = 45 * 1024 * 1024; // 45 MB target buffer
+  if (currentSizeBytes <= targetBytes) {
+    return inputPath;
+  }
+
+  const duration = durationSeconds && durationSeconds > 0 ? durationSeconds : 3600;
+  // Calculate bitrate to fit 45 MB
+  let bitrateKbps = Math.floor((targetBytes * 8) / (duration * 1000));
+  bitrateKbps = Math.max(24, Math.min(64, bitrateKbps));
+
+  const outputPath = inputPath.replace(/\.mp3$/, `_${bitrateKbps}k.mp3`);
+
+  return new Promise((resolve) => {
+    // -ac 1 converts to mono to preserve clarity at lower bitrates
+    execFile(
+      'ffmpeg',
+      ['-y', '-i', inputPath, '-b:a', `${bitrateKbps}k`, '-ac', '1', outputPath],
+      (err) => {
+        if (err || !require('fs').existsSync(outputPath)) {
+          resolve(inputPath);
+        } else {
+          resolve(outputPath);
+        }
+      },
+    );
+  });
+}
 
 // Track progress message IDs per job so the worker can update them
 /** @type {Map<number, { chatId: number, messageId: number }>} */
@@ -140,12 +177,29 @@ async function main() {
 
       try {
         if (job.quality === 'mp3') {
-          await bot.api.sendAudio(chatId, new InputFile(result.filePath), {
+          let uploadPath = result.filePath;
+          // If file is > 48 MB and standard Telegram cloud API is used, compress with ffmpeg
+          if (result.fileSizeBytes > 48 * 1024 * 1024 && !config.telegram.apiBaseUrl) {
+            uploadPath = await compressAudioToFitTelegram(
+              result.filePath,
+              result.fileSizeBytes,
+              result.actualDuration,
+            );
+          }
+
+          await bot.api.sendAudio(chatId, new InputFile(uploadPath), {
             caption,
             title: item.title || undefined,
             parse_mode: 'Markdown',
           });
         } else {
+          // Video: if > 50 MB and using standard Telegram cloud API, notify user clearly
+          if (result.fileSizeBytes > 50 * 1024 * 1024 && !config.telegram.apiBaseUrl) {
+            throw new Error(
+              `حجم الفيديو (${formattedSize}) يتجاوز الحد الأقصى المسموح به للبوتات في تيليجرام (50 ميجابايت). يمكنك اختيار دقة أقل (مثل 480p أو 360p أو صوت فقط MP3).`,
+            );
+          }
+
           await bot.api.sendVideo(chatId, new InputFile(result.filePath), {
             caption,
             duration: result.actualDuration || undefined,
@@ -161,6 +215,14 @@ async function main() {
           { jobId: job.id, itemId: item.id, error: err.message },
           'Failed to deliver item to user',
         );
+        // Alert user directly with the exact reason why file delivery was rejected
+        await bot.api
+          .sendMessage(
+            chatId,
+            `⚠️ *تعذر إرسال الملف إلى تيليجرام:*\n\n${escapeMarkdown(err.message)}`,
+            { parse_mode: 'Markdown' },
+          )
+          .catch(() => {});
       } finally {
         clearInterval(actionInterval);
       }

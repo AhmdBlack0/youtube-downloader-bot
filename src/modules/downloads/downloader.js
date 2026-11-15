@@ -94,7 +94,7 @@ function buildDownloadArgs(quality, jobDir, targetUrl, options = {}) {
       '--audio-format',
       'mp3', // Convert to MP3 container/codec
       '--audio-quality',
-      '128K', // Optimal 128 kbps for clear sound, small file size, and fast uploads
+      '64K', // 64 kbps optimal for voice/podcasts, keeping up to 1.7 hours under Telegram 50 MB limit
       '--',
       targetUrl,
     ];
