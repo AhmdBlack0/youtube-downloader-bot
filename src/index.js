@@ -61,24 +61,36 @@ async function main() {
       }
     },
 
-    // Progress updates: no % or speed (only simple item indicator for playlists)
+    // Progress updates: throttled live progress for both single videos and playlists
     onProgress: async (job, prog) => {
-      if (prog.total <= 1) return;
-
       const msgInfo = jobMessageMap.get(job.id);
       if (!msgInfo) return;
 
-      // Only edit once per playlist item to avoid Telegram rate limits & noise
+      const now = Date.now();
+      const lastUpdateKey = `${job.id}_last_progress`;
       // @ts-ignore
-      const cacheKey = `${job.id}_item`;
-      // @ts-ignore
-      if (jobMessageMap.get(cacheKey) === prog.itemIndex) return;
-      // @ts-ignore
-      jobMessageMap.set(cacheKey, prog.itemIndex);
+      const lastUpdateTime = jobMessageMap.get(lastUpdateKey) || 0;
 
-      const text =
-        `⏳ *جاري التحميل والمعالجة...*\n\n` +
-        `📋 *العنصر ${prog.itemIndex} من ${prog.total}:* ${escapeMarkdown(prog.title)}`;
+      // Throttle edits to at least 3.5 seconds to comply with Telegram rate limits
+      if (now - lastUpdateTime < 3500 && prog.percent < 99) {
+        return;
+      }
+      // @ts-ignore
+      jobMessageMap.set(lastUpdateKey, now);
+
+      let text = `⏳ *جاري التحميل والمعالجة...*\n\n`;
+      if (prog.total > 1) {
+        text += `📋 *العنصر ${prog.itemIndex} من ${prog.total}:* ${escapeMarkdown(prog.title)}\n`;
+      }
+      if (prog.percent > 0) {
+        text += `📊 *التقدم:* ${prog.percent.toFixed(1)}%\n`;
+      }
+      if (prog.speed) {
+        text += `🚀 *السرعة:* ${escapeMarkdown(prog.speed)}`;
+        if (prog.eta) {
+          text += ` \\| ⏱️ *المتبقي:* ${escapeMarkdown(prog.eta)}`;
+        }
+      }
 
       try {
         await bot.api.editMessageText(msgInfo.chatId, msgInfo.messageId, text, {
