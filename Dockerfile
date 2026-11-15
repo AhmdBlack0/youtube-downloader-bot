@@ -1,9 +1,12 @@
-# ----- Stage 1: Install dependencies -----
+# ----- Stage 1: Install dependencies and generate Prisma Client -----
 FROM node:20-slim AS deps
 
 WORKDIR /app
 COPY package.json package-lock.json* ./
-RUN npm ci --omit=dev
+COPY prisma ./prisma
+RUN npm ci
+RUN npx prisma generate
+RUN npm prune --omit=dev
 
 # ----- Stage 2: Production image -----
 FROM node:20-slim
@@ -28,18 +31,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Copy dependencies from stage 1
+# Copy production node_modules (including generated Prisma Client) from stage 1
 COPY --from=deps /app/node_modules ./node_modules
 
 # Copy application code
 COPY . .
-
-# Generate Prisma Client inside the container
-# WHY HERE AND NOT IN STAGE 1?
-# Because Prisma Client is generated from schema.prisma (which we COPY in this stage).
-# It's also platform-specific (Linux binary vs Windows binary), so it must be
-# generated in the same OS that will run it.
-RUN npx prisma generate
 
 # Create downloads directory
 RUN mkdir -p /app/downloads
