@@ -46,7 +46,9 @@ RUN mkdir -p /app/downloads
 
 # Run as non-root user for security
 RUN adduser --disabled-password --gecos '' botuser && \
-    chown -R botuser:botuser /app
+    mkdir -p /home/botuser/.cache && \
+    chown -R botuser:botuser /home/botuser /app
+ENV HOME=/home/botuser
 USER botuser
 
 CMD ["node", "src/index.js"]

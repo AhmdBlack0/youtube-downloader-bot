@@ -126,7 +126,7 @@ function classifyYtDlpError(stderr) {
  * }>}
  */
 async function getMetadata(targetUrl, options = {}) {
-  const timeoutMs = options.timeoutMs || 30000;
+  const timeoutMs = options.timeoutMs || 60000;
   const binary = options.binaryPath || resolveYtDlpBinary();
   const cookies = options.cookiesPath || getDefaultCookiesPath();
 
@@ -136,10 +136,7 @@ async function getMetadata(targetUrl, options = {}) {
     '--no-warnings',
     '--no-check-certificates',
     '--no-check-formats', // Skip probing format URLs to accelerate metadata extraction
-    '--js-runtimes',
-    'node',
-    '--remote-components',
-    'ejs:github',
+    '--skip-download',
   ];
 
   if (cookies && fs.existsSync(cookies)) {

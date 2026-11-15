@@ -47,8 +47,9 @@ function getArabicErrorMessage(code, params = {}) {
       return `⏱️ عذراً، مدة الفيديو (${params.duration || ''}) تتجاوز الحد الأقصى المسموح به (${params.maxDuration || 'ساعتان'}).`;
     case 'PLAYLIST_TOO_BIG':
       return `📋 قائمة التشغيل كبيرة جداً (${params.count} عنصر).\nالحد الأقصى المسموح به هو ${params.maxItems} عنصر.`;
+    case 'TIMEOUT':
     case 'NETWORK_TIMEOUT':
-      return '⏳ استغرقت محاولة جلب معلومات الفيديو وقتاً طويلاً. يرجى المحاولة لاحقاً.';
+      return '⏳ استغرقت عملية جلب معلومات الرابط وقتاً طويلاً. يرجى المحاولة مجدداً.';
     default:
       return '⚠️ حدث خطأ أثناء جلب معلومات الرابط. يرجى التحقق من الرابط والمحاولة مجدداً.';
   }

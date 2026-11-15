@@ -77,8 +77,10 @@ function registerUrlHandlers(bot) {
           return { id: 1 };
         });
 
+      // Playlists can contain 100+ items and need more time to paginate metadata
+      const isPlaylist = parsed.kind === 'PLAYLIST';
       const metadataPromise = getMetadata(parsed.normalizedUrl, {
-        timeoutMs: 30000,
+        timeoutMs: isPlaylist ? 120000 : 35000,
       });
 
       const [user, metadata] = await Promise.all([userPromise, metadataPromise]);
@@ -146,12 +148,14 @@ function registerUrlHandlers(bot) {
         });
       }
     } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('❌ URL Handler Metadata error:', err.message, err.code || '');
       logger.error(
         { error: err.message, code: err.code, url: parsed.normalizedUrl },
         'Metadata error',
       );
       const errorMsg = getArabicErrorMessage(err.code || 'UNKNOWN_ERROR');
-      await ctx.api.editMessageText(ctx.chat.id, statusMsg.message_id, errorMsg);
+      await ctx.api.editMessageText(ctx.chat.id, statusMsg.message_id, errorMsg).catch(() => {});
     }
   });
 
