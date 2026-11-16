@@ -23,7 +23,18 @@ const path = require('path');
 const { logger } = require('../../config/logger');
 
 function getDefaultCookiesPath() {
-  return process.env.COOKIES_PATH ? path.resolve(process.env.COOKIES_PATH) : undefined;
+  if (process.env.COOKIES_PATH && fs.existsSync(process.env.COOKIES_PATH)) {
+    return path.resolve(process.env.COOKIES_PATH);
+  }
+  const rootCookies = path.resolve(process.cwd(), 'cookies.txt');
+  if (fs.existsSync(rootCookies)) {
+    return rootCookies;
+  }
+  const dlCookies = path.resolve(process.cwd(), 'downloads', 'cookies.txt');
+  if (fs.existsSync(dlCookies)) {
+    return dlCookies;
+  }
+  return undefined;
 }
 
 // Common Windows fallback location for pip installed yt-dlp if not in system PATH

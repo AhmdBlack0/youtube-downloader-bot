@@ -12,6 +12,8 @@
  * 7. Cancel handler provides race-safe cancellation.
  */
 
+const fs = require('fs');
+const path = require('path');
 const { InlineKeyboard } = require('grammy');
 const { config, logger } = require('../../config');
 const { parseYouTubeUrl } = require('../../utils/url');
@@ -433,6 +435,49 @@ function registerUrlHandlers(bot) {
         text: '⚠️ لم يعد بالإمكان إلغاء هذا الطلب (قد يكون اكتمل أو أُلغي بالفعل)',
         show_alert: true,
       });
+    }
+  });
+
+  // Handle document upload (e.g. cookies.txt)
+  bot.on(':document', async (ctx) => {
+    const doc = ctx.message.document;
+    if (!doc) return;
+
+    const fileName = doc.file_name ? doc.file_name.toLowerCase() : '';
+    if (fileName.includes('cookie') || fileName.endsWith('.txt')) {
+      try {
+        const file = await ctx.getFile();
+        const fileUrl = config.telegram.apiBaseUrl
+          ? `${config.telegram.apiBaseUrl}/file/bot${config.bot.token}/${file.file_path}`
+          : `https://api.telegram.org/file/bot${config.bot.token}/${file.file_path}`;
+
+        const res = await globalThis.fetch(fileUrl);
+        const text = await res.text();
+
+        if (
+          text.includes('# Netscape') ||
+          text.includes('.youtube.com') ||
+          text.includes('LOGIN_INFO')
+        ) {
+          const autoCookiesFile = path.resolve(config.downloadDir, 'cookies.txt');
+          fs.mkdirSync(path.dirname(autoCookiesFile), { recursive: true });
+          fs.writeFileSync(autoCookiesFile, text.trim(), { mode: 0o600 });
+          process.env.COOKIES_PATH = autoCookiesFile;
+
+          await ctx.reply(
+            '✅ *تم حفظ وتفعيل ملف ملفات تعريف الارتباط (Cookies) بنجاح!*\n\n' +
+              'سيتم استخدامه تلقائياً الآن في جميع عمليات التحميل لتجاوز التحقق الأمني من يوتيوب 🚀',
+            { parse_mode: 'Markdown' },
+          );
+        } else {
+          await ctx.reply(
+            '⚠️ الملف المستلم ليس ملف تعريف ارتباط صالح لـ YouTube.\nتأكد من أن الملف بصيغة Netscape (cookies.txt).',
+          );
+        }
+      } catch (err) {
+        logger.error({ error: err.message }, 'Failed to save uploaded cookies file');
+        await ctx.reply(`❌ حدث خطأ أثناء معالجة ملف الـ Cookies: ${err.message}`);
+      }
     }
   });
 }

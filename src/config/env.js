@@ -105,6 +105,23 @@ if (parsed.data.COOKIES_CONTENT && parsed.data.COOKIES_CONTENT.trim()) {
     const autoCookiesFile = path.resolve(parsed.data.DOWNLOAD_DIR, 'cookies.txt');
     fs.mkdirSync(path.dirname(autoCookiesFile), { recursive: true });
     let content = parsed.data.COOKIES_CONTENT.trim();
+
+    // Support Base64 encoded cookies string
+    if (!content.includes('\n') && !content.includes('\t') && content.length > 50) {
+      try {
+        const decoded = Buffer.from(content, 'base64').toString('utf8');
+        if (
+          decoded.includes('# Netscape') ||
+          decoded.includes('.youtube.com') ||
+          decoded.includes('\t')
+        ) {
+          content = decoded;
+        }
+      } catch (_e) {
+        // Fall back to raw content
+      }
+    }
+
     // Handle literal escaped newlines if pasted as single-line string
     if (content.includes('\\n') && !content.includes('\n')) {
       content = content.replace(/\\n/g, '\n');
@@ -115,6 +132,14 @@ if (parsed.data.COOKIES_CONTENT && parsed.data.COOKIES_CONTENT.trim()) {
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error('⚠️ Failed to save COOKIES_CONTENT to file:', err.message);
+  }
+} else if (!resolvedCookiesPath) {
+  // If not specified via env, check if cookies.txt exists in current directory or downloads
+  const fs = require('fs');
+  const rootCookies = path.resolve(process.cwd(), 'cookies.txt');
+  if (fs.existsSync(rootCookies)) {
+    resolvedCookiesPath = rootCookies;
+    process.env.COOKIES_PATH = rootCookies;
   }
 }
 
