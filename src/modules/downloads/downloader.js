@@ -73,12 +73,13 @@ function buildDownloadArgs(quality, jobDir, targetUrl, options = {}) {
     '5', // Multi-connection parallel chunk downloading for faster speeds
     '--buffer-size',
     '16M',
+    '--embed-metadata',
     '--progress',
     '--newline',
     '--progress-template',
     'PROGRESS:%(progress._percent_str)s|%(progress._speed_str)s|%(progress._eta_str)s',
     '--print',
-    'after_move:FINAL:%(filepath)s|%(height)s|%(width)s|%(duration)s',
+    'after_move:FINAL:%(filepath)s|%(height)s|%(width)s|%(duration)s|%(title)s|%(uploader)s',
     '-o',
     outputTemplate,
   ];
@@ -139,6 +140,8 @@ function buildDownloadArgs(quality, jobDir, targetUrl, options = {}) {
  *   actualHeight: number|null,
  *   actualWidth: number|null,
  *   actualDuration: number|null,
+ *   title: string|null,
+ *   uploader: string|null,
  *   isFallback: boolean,
  *   requestedQuality: string
  * }>}
@@ -246,18 +249,32 @@ async function downloadVideo({
       }
 
       try {
-        // Parse final metadata printed by after_move:FINAL:filepath|height|width|duration
+        // Parse final metadata printed by after_move:FINAL:filepath|height|width|duration|title|uploader
         let filePath = '';
         let actualHeight = null;
         let actualWidth = null;
         let actualDuration = null;
+        let title = null;
+        let uploader = null;
 
         if (finalOutputLine) {
-          const [fPath, hStr, wStr, dStr] = finalOutputLine.split('|');
-          filePath = fPath?.trim() || '';
-          actualHeight = hStr && hStr !== 'NA' ? parseInt(hStr, 10) : null;
-          actualWidth = wStr && wStr !== 'NA' ? parseInt(wStr, 10) : null;
-          actualDuration = dStr && dStr !== 'NA' ? parseInt(dStr, 10) : null;
+          const parts = finalOutputLine.split('|');
+          filePath = parts[0]?.trim() || '';
+          actualHeight = parts[1] && parts[1] !== 'NA' ? parseInt(parts[1], 10) : null;
+          actualWidth = parts[2] && parts[2] !== 'NA' ? parseInt(parts[2], 10) : null;
+          actualDuration = parts[3] && parts[3] !== 'NA' ? parseInt(parts[3], 10) : null;
+          if (parts.length > 5) {
+            const rawUploader = parts[parts.length - 1]?.trim();
+            uploader = rawUploader && rawUploader !== 'NA' ? rawUploader : null;
+            const rawTitle = parts
+              .slice(4, parts.length - 1)
+              .join('|')
+              .trim();
+            title = rawTitle && rawTitle !== 'NA' ? rawTitle : null;
+          } else if (parts.length === 5) {
+            const rawTitle = parts[4]?.trim();
+            title = rawTitle && rawTitle !== 'NA' ? rawTitle : null;
+          }
         }
 
         // If after_move wasn't captured or file path empty, search jobDir for the media file
@@ -298,6 +315,8 @@ async function downloadVideo({
           actualHeight,
           actualWidth,
           actualDuration,
+          title,
+          uploader,
           isFallback,
           requestedQuality: quality,
         });

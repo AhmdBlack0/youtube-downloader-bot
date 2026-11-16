@@ -294,7 +294,7 @@ function registerUrlHandlers(bot) {
     const qualityLabel = quality === 'mp3' ? 'صوت فقط (MP3)' : `${quality}p`;
 
     try {
-      // Prepare playlist items if available
+      // Prepare items records for both PLAYLIST and single VIDEO
       const maxItems =
         config.limits.maxPlaylistItems > 0 ? config.limits.maxPlaylistItems : Infinity;
       const items =
@@ -303,7 +303,12 @@ function registerUrlHandlers(bot) {
               title: e.title,
               videoUrl: `https://www.youtube.com/watch?v=${e.id}`,
             }))
-          : undefined;
+          : [
+              {
+                title: pending.title || 'فيديو',
+                videoUrl: pending.url,
+              },
+            ];
 
       // Create QUEUED Job in PostgreSQL
       const job = await createJob({

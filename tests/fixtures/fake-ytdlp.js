@@ -58,6 +58,6 @@ else {
     width = '854';
   }
 
-  process.stdout.write(`FINAL:${filePath}|${height}|${width}|120\n`);
+  process.stdout.write(`FINAL:${filePath}|${height}|${width}|120|Test Title|Test Uploader\n`);
   process.exit(0);
 }

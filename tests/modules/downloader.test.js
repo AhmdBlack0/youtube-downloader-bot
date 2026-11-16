@@ -28,6 +28,7 @@ describe('Downloader Engine (downloader.js)', () => {
       expect(args).toContain('--merge-output-format');
       expect(args).toContain('mp4');
       expect(args).toContain('--write-thumbnail');
+      expect(args).toContain('--embed-metadata');
 
       const dashDashIndex = args.indexOf('--');
       expect(dashDashIndex).toBeGreaterThan(-1);
@@ -74,6 +75,9 @@ describe('Downloader Engine (downloader.js)', () => {
         // Verify result
         expect(result.actualHeight).toBe(720);
         expect(result.actualWidth).toBe(1280);
+        expect(result.actualDuration).toBe(120);
+        expect(result.title).toBe('Test Title');
+        expect(result.uploader).toBe('Test Uploader');
         expect(result.isFallback).toBe(false);
         expect(fs.existsSync(result.filePath)).toBe(true);
         expect(result.thumbnailPath).not.toBeNull();

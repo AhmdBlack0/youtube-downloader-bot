@@ -15,16 +15,24 @@ const { prisma, applyCustomIndexes } = require('./modules/db');
 const { Worker } = require('./worker');
 const { getYtDlpVersion } = require('./modules/downloads/ytdlp');
 const { escapeMarkdown } = require('./bot/handlers/url');
-const { formatBytes } = require('./utils/format');
+const { formatBytes, formatDuration } = require('./utils/format');
 
 /**
  * Re-encode oversized audio using FFmpeg to guarantee it fits under Telegram's 50 MB cloud Bot API limit.
  * @param {string} inputPath
  * @param {number} currentSizeBytes
  * @param {number} [durationSeconds]
+ * @param {string} [title]
+ * @param {string} [artist]
  * @returns {Promise<string>}
  */
-async function compressAudioToFitTelegram(inputPath, currentSizeBytes, durationSeconds) {
+async function compressAudioToFitTelegram(
+  inputPath,
+  currentSizeBytes,
+  durationSeconds,
+  title,
+  artist,
+) {
   const targetBytes = 45 * 1024 * 1024; // 45 MB target buffer
   if (currentSizeBytes <= targetBytes) {
     return inputPath;
@@ -37,19 +45,24 @@ async function compressAudioToFitTelegram(inputPath, currentSizeBytes, durationS
 
   const outputPath = inputPath.replace(/\.mp3$/, `_${bitrateKbps}k.mp3`);
 
+  const ffmpegArgs = ['-y', '-i', inputPath, '-b:a', `${bitrateKbps}k`, '-ac', '1'];
+  if (title) {
+    ffmpegArgs.push('-metadata', `title=${title}`);
+  }
+  if (artist) {
+    ffmpegArgs.push('-metadata', `artist=${artist}`);
+  }
+  ffmpegArgs.push(outputPath);
+
   return new Promise((resolve) => {
     // -ac 1 converts to mono to preserve clarity at lower bitrates
-    execFile(
-      'ffmpeg',
-      ['-y', '-i', inputPath, '-b:a', `${bitrateKbps}k`, '-ac', '1', outputPath],
-      (err) => {
-        if (err || !require('fs').existsSync(outputPath)) {
-          resolve(inputPath);
-        } else {
-          resolve(outputPath);
-        }
-      },
-    );
+    execFile('ffmpeg', ffmpegArgs, (err) => {
+      if (err || !require('fs').existsSync(outputPath)) {
+        resolve(inputPath);
+      } else {
+        resolve(outputPath);
+      }
+    });
   });
 }
 
@@ -163,7 +176,18 @@ async function main() {
         }
       }
 
-      let caption = `🎬 *${escapeMarkdown(item.title || result.title || 'فيديو')}*`;
+      const rawTitle =
+        item.title && item.title !== 'Video' && item.title !== 'فيديو'
+          ? item.title
+          : result.title || item.title || 'مقطع صوتي';
+      const mediaTitle = rawTitle;
+      const durationSeconds = result.actualDuration || undefined;
+      const performer = result.uploader || 'YouTube';
+
+      let caption = `🎬 *${escapeMarkdown(mediaTitle)}*`;
+      if (durationSeconds) {
+        caption += `\n⏱️ _المدة: ${formatDuration(durationSeconds)}_`;
+      }
       if (result.isFallback && result.actualHeight) {
         caption += `\n⚠️ _(دقة ${result.actualHeight}p بدلاً من ${job.quality}p)_`;
       }
@@ -184,12 +208,16 @@ async function main() {
               result.filePath,
               result.fileSizeBytes,
               result.actualDuration,
+              mediaTitle,
+              performer,
             );
           }
 
           await bot.api.sendAudio(chatId, new InputFile(uploadPath), {
             caption,
-            title: item.title || undefined,
+            title: mediaTitle,
+            performer,
+            duration: durationSeconds,
             parse_mode: 'Markdown',
           });
         } else {
