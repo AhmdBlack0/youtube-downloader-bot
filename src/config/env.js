@@ -159,7 +159,9 @@ const config = Object.freeze({
   telegram: {
     apiId: parsed.data.TELEGRAM_API_ID,
     apiHash: parsed.data.TELEGRAM_API_HASH,
-    apiBaseUrl: parsed.data.TELEGRAM_API_BASE_URL,
+    apiBaseUrl: parsed.data.TELEGRAM_API_BASE_URL
+      ? parsed.data.TELEGRAM_API_BASE_URL.replace(/\/+$/, '')
+      : undefined,
   },
   db: {
     url: parsed.data.DATABASE_URL,
