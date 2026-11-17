@@ -39,6 +39,8 @@ describe('Downloader Engine (downloader.js)', () => {
       const args = buildDownloadArgs('mp3', '/tmp/job2', 'https://www.youtube.com/watch?v=abc');
 
       expect(args).toContain('-x');
+      expect(args).toContain('-f');
+      expect(args).toContain('ba/b');
       expect(args).toContain('--audio-format');
       expect(args).toContain('mp3');
       expect(args).toContain('--audio-quality');

@@ -81,7 +81,7 @@ function buildDownloadArgs(quality, jobDir, targetUrl, options = {}) {
     '--remote-components',
     'ejs:github',
     '--concurrent-fragments',
-    '5', // Multi-connection parallel chunk downloading for faster speeds
+    '8', // Multi-connection parallel chunk downloading for faster speeds
     '--buffer-size',
     '16M',
     '--embed-metadata',
@@ -102,11 +102,13 @@ function buildDownloadArgs(quality, jobDir, targetUrl, options = {}) {
   if (quality === 'mp3') {
     return [
       ...commonArgs,
+      '-f',
+      'ba/b', // Download ONLY pure audio stream, avoiding huge video downloads
       '-x', // Extract audio track
       '--audio-format',
       'mp3', // Convert to MP3 container/codec
       '--audio-quality',
-      '64K', // 64 kbps optimal for voice/podcasts, keeping up to 1.7 hours under Telegram 50 MB limit
+      options.audioBitrate || '64K', // 64 kbps optimal for voice/podcasts
       '--',
       targetUrl,
     ];
