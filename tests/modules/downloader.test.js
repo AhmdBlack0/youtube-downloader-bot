@@ -35,16 +35,14 @@ describe('Downloader Engine (downloader.js)', () => {
       expect(args[dashDashIndex + 1]).toBe('https://www.youtube.com/watch?v=abc');
     });
 
-    test('builds audio args with -x, mp3 format, and "--"', () => {
+    test('builds audio args with -x, m4a format, and "--"', () => {
       const args = buildDownloadArgs('mp3', '/tmp/job2', 'https://www.youtube.com/watch?v=abc');
 
       expect(args).toContain('-x');
       expect(args).toContain('-f');
-      expect(args).toContain('ba/b');
+      expect(args).toContain('140/ba[ext=m4a]/ba/b');
       expect(args).toContain('--audio-format');
-      expect(args).toContain('mp3');
-      expect(args).toContain('--audio-quality');
-      expect(args).toContain('64K');
+      expect(args).toContain('m4a');
 
       const dashDashIndex = args.indexOf('--');
       expect(dashDashIndex).toBeGreaterThan(-1);

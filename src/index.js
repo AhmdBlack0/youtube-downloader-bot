@@ -45,7 +45,7 @@ async function compressAudioToFitTelegram(
   let bitrateKbps = Math.floor((targetBytes * 8) / (duration * 1000));
   bitrateKbps = Math.max(24, Math.min(64, bitrateKbps));
 
-  const outputPath = inputPath.replace(/\.mp3$/, `_${bitrateKbps}k.mp3`);
+  const outputPath = inputPath.replace(/\.(mp3|m4a)$/, `_${bitrateKbps}k.mp3`);
 
   const ffmpegArgs = ['-y', '-i', inputPath, '-b:a', `${bitrateKbps}k`, '-ac', '1'];
   if (title) {

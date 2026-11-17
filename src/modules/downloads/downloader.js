@@ -103,12 +103,10 @@ function buildDownloadArgs(quality, jobDir, targetUrl, options = {}) {
     return [
       ...commonArgs,
       '-f',
-      'ba/b', // Download ONLY pure audio stream, avoiding huge video downloads
+      '140/ba[ext=m4a]/ba/b', // Format 140 is direct AAC audio (instant stream copy, zero transcoding)
       '-x', // Extract audio track
       '--audio-format',
-      'mp3', // Convert to MP3 container/codec
-      '--audio-quality',
-      options.audioBitrate || '64K', // 64 kbps optimal for voice/podcasts
+      'm4a', // Native Telegram audio format
       '--',
       targetUrl,
     ];
@@ -293,7 +291,9 @@ async function downloadVideo({
         // If after_move wasn't captured or file path empty, search jobDir for the media file
         if (!filePath || !fs.existsSync(filePath)) {
           const files = await fs.promises.readdir(jobDir);
-          const mediaFile = files.find((f) => f.endsWith('.mp4') || f.endsWith('.mp3'));
+          const mediaFile = files.find(
+            (f) => f.endsWith('.mp4') || f.endsWith('.mp3') || f.endsWith('.m4a'),
+          );
           if (!mediaFile) {
             reject(
               new YtDlpError('Downloaded media file not found in job directory', 'FILE_NOT_FOUND'),
@@ -307,7 +307,7 @@ async function downloadVideo({
 
         // Find thumbnail if generated
         let thumbnailPath = null;
-        const potentialThumb = filePath.replace(/\.(mp4|mp3)$/, '.jpg');
+        const potentialThumb = filePath.replace(/\.(mp4|mp3|m4a)$/, '.jpg');
         if (fs.existsSync(potentialThumb)) {
           thumbnailPath = potentialThumb;
         }

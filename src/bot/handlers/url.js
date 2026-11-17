@@ -36,6 +36,71 @@ const { prisma } = require('../../modules/db');
 const { getCachedMedia } = require('../../modules/mediaCache');
 
 /**
+ * Fast-path metadata extractor.
+ * 1. Checks MediaCache database (5ms)
+ * 2. Fetches YouTube oEmbed (200-400ms)
+ * 3. Falls back to full yt-dlp only if needed
+ *
+ * @param {import('../../utils/url').ParsedUrlResult} parsed
+ * @returns {Promise<{
+ *   kind: 'VIDEO'|'PLAYLIST',
+ *   title: string,
+ *   duration: number|null,
+ *   itemCount: number,
+ *   entries?: Array<{ id: string, title: string }>
+ * }>}
+ */
+async function getFastVideoMetadata(parsed) {
+  if (parsed.kind === 'PLAYLIST') {
+    return getMetadata(parsed.normalizedUrl, { timeoutMs: 120000 });
+  }
+
+  // 1. Instant check in local MediaCache (takes ~5ms)
+  try {
+    const cached = await prisma.mediaCache.findFirst({
+      where: { youtubeId: parsed.id },
+      select: { title: true, duration: true },
+    });
+    if (cached?.title) {
+      return {
+        kind: 'VIDEO',
+        title: cached.title,
+        duration: cached.duration || null,
+        itemCount: 1,
+        entries: [],
+      };
+    }
+  } catch (_e) {
+    /* ignore */
+  }
+
+  // 2. Fast-path: YouTube official oEmbed API (~200ms)
+  try {
+    const oembedUrl = `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${parsed.id}&format=json`;
+    const res = await globalThis.fetch(oembedUrl, {
+      signal: globalThis.AbortSignal.timeout(2500),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.title) {
+        return {
+          kind: 'VIDEO',
+          title: data.title,
+          duration: null,
+          itemCount: 1,
+          entries: [],
+        };
+      }
+    }
+  } catch (_e) {
+    /* fallback to yt-dlp */
+  }
+
+  // 3. Fallback to full yt-dlp extraction
+  return getMetadata(parsed.normalizedUrl, { timeoutMs: 35000 });
+}
+
+/**
  * Register URL and callback query handlers on the bot.
  * @param {import('grammy').Bot} bot
  */
@@ -60,7 +125,7 @@ function registerUrlHandlers(bot) {
     const statusMsg = await ctx.reply('🔍 جاري التحقق من الرابط واستخراج المعلومات...');
 
     try {
-      // 3. Run user upsert and metadata extraction concurrently in parallel
+      // 3. Run user upsert and fast metadata extraction concurrently in parallel
       const telegramId = BigInt(ctx.from.id);
       const userPromise = prisma.user
         .upsert({
@@ -80,11 +145,7 @@ function registerUrlHandlers(bot) {
           return { id: 1 };
         });
 
-      // Playlists can contain 100+ items and need more time to paginate metadata
-      const isPlaylist = parsed.kind === 'PLAYLIST';
-      const metadataPromise = getMetadata(parsed.normalizedUrl, {
-        timeoutMs: isPlaylist ? 120000 : 35000,
-      });
+      const metadataPromise = getFastVideoMetadata(parsed);
 
       const [user, metadata] = await Promise.all([userPromise, metadataPromise]);
       const userId = user.id;
