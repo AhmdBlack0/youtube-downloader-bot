@@ -115,11 +115,11 @@ function buildDownloadArgs(quality, jobDir, targetUrl, options = {}) {
 
   const height = parseInt(quality, 10);
   // Format selector with cascade fallback:
-  // 1. Pre-merged single stream MP4 at or below requested height (fastest, no ffmpeg muxing step)
-  // 2. Best video at or below requested height + best audio (merged to mp4)
-  // 3. Best single stream available below that
+  // 1. Best video at or below requested height + best audio in MP4/M4A (fastest mux, highest quality)
+  // 2. Best video at or below requested height + best audio
+  // 3. Pre-merged single stream at or below requested height
   // 4. Any best available video+audio or stream fallback
-  const formatSelector = `b[height<=${height}][ext=mp4]/bv*[height<=${height}]+ba/b[height<=${height}]/bv*+ba/b/best`;
+  const formatSelector = `bv*[height<=${height}][ext=mp4]+ba[ext=m4a]/bv*[height<=${height}]+ba/b[height<=${height}]/bv*+ba/b/best`;
 
   return [
     ...commonArgs,

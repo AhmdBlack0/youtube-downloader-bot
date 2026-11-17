@@ -25,7 +25,7 @@ describe('Downloader Engine (downloader.js)', () => {
 
       expect(args).toContain('-f');
       expect(args).toContain(
-        'b[height<=720][ext=mp4]/bv*[height<=720]+ba/b[height<=720]/bv*+ba/b/best',
+        'bv*[height<=720][ext=mp4]+ba[ext=m4a]/bv*[height<=720]+ba/b[height<=720]/bv*+ba/b/best',
       );
       expect(args).toContain('--merge-output-format');
       expect(args).toContain('mp4');
