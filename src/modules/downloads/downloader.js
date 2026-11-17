@@ -75,7 +75,7 @@ function buildDownloadArgs(quality, jobDir, targetUrl, options = {}) {
     '--no-check-certificates',
     '--no-warnings',
     '--extractor-args',
-    'youtube:player-client=android,web',
+    'youtube:player-client=default,web',
     '--js-runtimes',
     'node',
     '--remote-components',
@@ -103,7 +103,7 @@ function buildDownloadArgs(quality, jobDir, targetUrl, options = {}) {
     return [
       ...commonArgs,
       '-f',
-      '140/ba[ext=m4a]/ba/b', // Format 140 is direct AAC audio (instant stream copy, zero transcoding)
+      '140/ba[ext=m4a]/ba/b/best', // Direct AAC audio, falling back to best audio, pre-merged stream, or best stream
       '-x', // Extract audio track
       '--audio-format',
       'm4a', // Native Telegram audio format
@@ -117,7 +117,8 @@ function buildDownloadArgs(quality, jobDir, targetUrl, options = {}) {
   // 1. Pre-merged single stream MP4 at or below requested height (fastest, no ffmpeg muxing step)
   // 2. Best video at or below requested height + best audio (merged to mp4)
   // 3. Best single stream available below that
-  const formatSelector = `b[height<=${height}][ext=mp4]/bv*[height<=${height}]+ba/b[height<=${height}]/b`;
+  // 4. Any best available video+audio or stream fallback
+  const formatSelector = `b[height<=${height}][ext=mp4]/bv*[height<=${height}]+ba/b[height<=${height}]/bv*+ba/b/best`;
 
   return [
     ...commonArgs,

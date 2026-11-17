@@ -1,6 +1,7 @@
 // @ts-check
 const { z } = require('zod');
 const path = require('path');
+const { sanitizeNetscapeCookies } = require('../utils/cookies');
 
 /*
  * WHY ZOD FOR CONFIG?
@@ -126,7 +127,8 @@ if (parsed.data.COOKIES_CONTENT && parsed.data.COOKIES_CONTENT.trim()) {
     if (content.includes('\\n') && !content.includes('\n')) {
       content = content.replace(/\\n/g, '\n');
     }
-    fs.writeFileSync(autoCookiesFile, content, { mode: 0o600 });
+    const cleanContent = sanitizeNetscapeCookies(content);
+    fs.writeFileSync(autoCookiesFile, cleanContent, { mode: 0o600 });
     resolvedCookiesPath = autoCookiesFile;
     process.env.COOKIES_PATH = autoCookiesFile;
   } catch (err) {
@@ -138,6 +140,13 @@ if (parsed.data.COOKIES_CONTENT && parsed.data.COOKIES_CONTENT.trim()) {
   const fs = require('fs');
   const rootCookies = path.resolve(process.cwd(), 'cookies.txt');
   if (fs.existsSync(rootCookies)) {
+    try {
+      const raw = fs.readFileSync(rootCookies, 'utf8');
+      const clean = sanitizeNetscapeCookies(raw);
+      fs.writeFileSync(rootCookies, clean, { mode: 0o600 });
+    } catch (_e) {
+      /* ignore */
+    }
     resolvedCookiesPath = rootCookies;
     process.env.COOKIES_PATH = rootCookies;
   }

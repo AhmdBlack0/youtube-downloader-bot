@@ -24,7 +24,9 @@ describe('Downloader Engine (downloader.js)', () => {
       const args = buildDownloadArgs('720', '/tmp/job1', 'https://www.youtube.com/watch?v=abc');
 
       expect(args).toContain('-f');
-      expect(args).toContain('b[height<=720][ext=mp4]/bv*[height<=720]+ba/b[height<=720]/b');
+      expect(args).toContain(
+        'b[height<=720][ext=mp4]/bv*[height<=720]+ba/b[height<=720]/bv*+ba/b/best',
+      );
       expect(args).toContain('--merge-output-format');
       expect(args).toContain('mp4');
       expect(args).toContain('--write-thumbnail');
@@ -40,7 +42,7 @@ describe('Downloader Engine (downloader.js)', () => {
 
       expect(args).toContain('-x');
       expect(args).toContain('-f');
-      expect(args).toContain('140/ba[ext=m4a]/ba/b');
+      expect(args).toContain('140/ba[ext=m4a]/ba/b/best');
       expect(args).toContain('--audio-format');
       expect(args).toContain('m4a');
 

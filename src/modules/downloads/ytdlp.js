@@ -149,7 +149,7 @@ async function getMetadata(targetUrl, options = {}) {
     '--no-check-formats', // Skip probing format URLs to accelerate metadata extraction
     '--skip-download',
     '--extractor-args',
-    'youtube:player-client=android,web',
+    'youtube:player-client=default,web',
   ];
 
   if (cookies && fs.existsSync(cookies)) {

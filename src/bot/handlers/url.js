@@ -32,6 +32,7 @@ const {
   PLAYLIST_PAGE_SIZE,
 } = require('../keyboards/quality');
 const { formatDuration, getArabicErrorMessage } = require('../../utils/format');
+const { sanitizeNetscapeCookies } = require('../../utils/cookies');
 const { prisma } = require('../../modules/db');
 const { getCachedMedia } = require('../../modules/mediaCache');
 
@@ -574,7 +575,8 @@ function registerUrlHandlers(bot) {
         ) {
           const autoCookiesFile = path.resolve(config.downloadDir, 'cookies.txt');
           fs.mkdirSync(path.dirname(autoCookiesFile), { recursive: true });
-          fs.writeFileSync(autoCookiesFile, text.trim(), { mode: 0o600 });
+          const cleanCookies = sanitizeNetscapeCookies(text);
+          fs.writeFileSync(autoCookiesFile, cleanCookies, { mode: 0o600 });
           process.env.COOKIES_PATH = autoCookiesFile;
 
           await ctx.reply(
