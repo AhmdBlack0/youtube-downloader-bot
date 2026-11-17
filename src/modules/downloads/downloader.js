@@ -69,13 +69,14 @@ function killProcessTree(child) {
  */
 function buildDownloadArgs(quality, jobDir, targetUrl, options = {}) {
   const outputTemplate = path.join(jobDir, '%(id)s.%(ext)s');
-  const cookies = options.cookiesPath || getDefaultCookiesPath();
+  const cookies =
+    options.cookiesPath === null ? undefined : options.cookiesPath || getDefaultCookiesPath();
 
   const commonArgs = [
     '--no-check-certificates',
     '--no-warnings',
     '--extractor-args',
-    'youtube:player-client=default,web',
+    'youtube:player-client=android,web,default',
     '--js-runtimes',
     'node',
     '--remote-components',
@@ -167,6 +168,7 @@ async function downloadVideo({
   binaryPath,
   cancelToken,
   cookiesPath,
+  retriedWithoutCookies = false,
 }) {
   const binary = binaryPath || resolveYtDlpBinary();
   const rawArgs = buildDownloadArgs(quality, jobDir, url, { cookiesPath });
@@ -256,6 +258,32 @@ async function downloadVideo({
 
       if (code !== 0) {
         const classified = classifyYtDlpError(stderrData);
+        const usedCookies =
+          cookiesPath === null ? undefined : cookiesPath || getDefaultCookiesPath();
+        if (
+          classified.code === 'BOT_VERIFICATION_REQUIRED' &&
+          usedCookies &&
+          !retriedWithoutCookies
+        ) {
+          logger.warn(
+            { url },
+            'Bot verification required with cookies (session may be expired). Retrying once without cookies...',
+          );
+          downloadVideo({
+            url,
+            quality,
+            jobDir,
+            onProgress,
+            timeoutMs,
+            binaryPath,
+            cancelToken,
+            cookiesPath: null,
+            retriedWithoutCookies: true,
+          })
+            .then(resolve)
+            .catch(reject);
+          return;
+        }
         reject(new YtDlpError(classified.message, classified.code, stderrData));
         return;
       }

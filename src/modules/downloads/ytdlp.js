@@ -139,7 +139,8 @@ function classifyYtDlpError(stderr) {
 async function getMetadata(targetUrl, options = {}) {
   const timeoutMs = options.timeoutMs || 60000;
   const binary = options.binaryPath || resolveYtDlpBinary();
-  const cookies = options.cookiesPath || getDefaultCookiesPath();
+  const cookies =
+    options.cookiesPath === null ? undefined : options.cookiesPath || getDefaultCookiesPath();
 
   const commonArgs = [
     '--dump-single-json',
@@ -149,7 +150,11 @@ async function getMetadata(targetUrl, options = {}) {
     '--no-check-formats', // Skip probing format URLs to accelerate metadata extraction
     '--skip-download',
     '--extractor-args',
-    'youtube:player-client=default,web',
+    'youtube:player-client=android,web,default',
+    '--js-runtimes',
+    'node',
+    '--remote-components',
+    'ejs:github',
   ];
 
   if (cookies && fs.existsSync(cookies)) {
