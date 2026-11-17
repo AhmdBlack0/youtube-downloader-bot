@@ -14,6 +14,42 @@
 const { prisma } = require('./db');
 const { logger } = require('../config/logger');
 
+// --- In-Memory L1 Cache (0.001 ms instant lookup) ---
+/** @type {Map<string, { data: import('@prisma/client').MediaCache, expiresAt: number }>} */
+const l1Cache = new Map();
+const L1_CACHE_MAX = 2000;
+const L1_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+function getL1CacheKey(youtubeId, quality) {
+  return `${youtubeId}:${quality}`;
+}
+
+function getFromL1Cache(youtubeId, quality) {
+  const key = getL1CacheKey(youtubeId, quality);
+  const entry = l1Cache.get(key);
+  if (!entry) return null;
+  if (Date.now() > entry.expiresAt) {
+    l1Cache.delete(key);
+    return null;
+  }
+  return entry.data;
+}
+
+function setToL1Cache(youtubeId, quality, data) {
+  if (l1Cache.size >= L1_CACHE_MAX) {
+    const oldestKey = l1Cache.keys().next().value;
+    if (oldestKey) l1Cache.delete(oldestKey);
+  }
+  l1Cache.set(getL1CacheKey(youtubeId, quality), {
+    data,
+    expiresAt: Date.now() + L1_TTL_MS,
+  });
+}
+
+function clearL1Cache() {
+  l1Cache.clear();
+}
+
 /**
  * Retrieve cached Telegram file_id for a given YouTube video ID and quality.
  *
@@ -24,6 +60,14 @@ const { logger } = require('../config/logger');
 async function getCachedMedia(youtubeId, quality) {
   if (!youtubeId || !quality) return null;
 
+  // 1. Instant L1 in-memory lookup (0ms, zero database I/O)
+  const l1Hit = getFromL1Cache(youtubeId, quality);
+  if (l1Hit) {
+    logger.info({ youtubeId, quality, fileId: l1Hit.fileId }, '⚡ L1 In-Memory Cache HIT! (0ms)');
+    return l1Hit;
+  }
+
+  // 2. L2 Database lookup (PostgreSQL)
   try {
     const cached = await prisma.mediaCache.findUnique({
       where: {
@@ -35,6 +79,7 @@ async function getCachedMedia(youtubeId, quality) {
     });
 
     if (cached) {
+      setToL1Cache(youtubeId, quality, cached);
       logger.info(
         { youtubeId, quality, fileId: cached.fileId },
         '⚡ Media cache HIT! Instant delivery available',
@@ -103,6 +148,10 @@ async function saveCachedMedia(entry) {
       },
     });
 
+    if (saved) {
+      setToL1Cache(entry.youtubeId, entry.quality, saved);
+    }
+
     logger.info(
       { youtubeId: entry.youtubeId, quality: entry.quality, fileId: entry.fileId },
       '💾 Saved media file_id to MediaCache',
@@ -118,4 +167,5 @@ async function saveCachedMedia(entry) {
 module.exports = {
   getCachedMedia,
   saveCachedMedia,
+  clearL1Cache,
 };

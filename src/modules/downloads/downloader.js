@@ -13,6 +13,23 @@ const path = require('path');
 const { logger } = require('../../config/logger');
 const { resolveYtDlpBinary, YtDlpError, classifyYtDlpError } = require('./ytdlp');
 
+let isAria2Available = null;
+/**
+ * Detect if aria2c multi-connection downloader is installed on the host system.
+ * @returns {boolean}
+ */
+function hasAria2c() {
+  if (isAria2Available !== null) return isAria2Available;
+  try {
+    const { execSync } = require('child_process');
+    execSync(process.platform === 'win32' ? 'where aria2c' : 'which aria2c', { stdio: 'ignore' });
+    isAria2Available = true;
+  } catch {
+    isAria2Available = false;
+  }
+  return isAria2Available;
+}
+
 function getDefaultCookiesPath() {
   if (process.env.COOKIES_PATH && fs.existsSync(process.env.COOKIES_PATH)) {
     return path.resolve(process.env.COOKIES_PATH);
@@ -75,6 +92,7 @@ function buildDownloadArgs(quality, jobDir, targetUrl, options = {}) {
   const commonArgs = [
     '--no-check-certificates',
     '--no-warnings',
+    '--no-mtime', // Skip writing file modification times for faster I/O
     '--extractor-args',
     'youtube:player-client=android,web,default',
     '--js-runtimes',
@@ -95,6 +113,16 @@ function buildDownloadArgs(quality, jobDir, targetUrl, options = {}) {
     '-o',
     outputTemplate,
   ];
+
+  // If aria2c is available on the system (e.g. in Docker), use it for high-speed multi-threaded chunks
+  if (hasAria2c()) {
+    commonArgs.push(
+      '--downloader',
+      'aria2c',
+      '--downloader-args',
+      'aria2c:-c -j 8 -x 8 -s 8 -k 1M --file-allocation=none --summary-interval=0 --console-log-level=warn',
+    );
+  }
 
   if (cookies && fs.existsSync(cookies)) {
     commonArgs.push('--cookies', cookies);

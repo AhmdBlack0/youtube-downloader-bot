@@ -27,6 +27,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     openssl \
     ffmpeg \
+    aria2 \
     python3 \
     python3-pip \
     && pip3 install --break-system-packages -U "yt-dlp[default]" \
