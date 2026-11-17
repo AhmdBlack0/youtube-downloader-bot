@@ -75,7 +75,7 @@ function buildDownloadArgs(quality, jobDir, targetUrl, options = {}) {
     '--no-check-certificates',
     '--no-warnings',
     '--extractor-args',
-    'youtube:player-client=ios,android,web',
+    'youtube:player-client=android,web',
     '--js-runtimes',
     'node',
     '--remote-components',
