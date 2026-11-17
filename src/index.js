@@ -71,17 +71,23 @@ async function compressAudioToFitTelegram(
 }
 
 /**
- * Split oversized video into < 48 MB segments using FFmpeg stream copy (-c copy).
+ * Split oversized video into segments using FFmpeg stream copy (-c copy).
  * Zero re-encoding, preserves 100% original quality, executes in seconds.
  *
  * @param {string} inputPath
  * @param {number} currentSizeBytes
  * @param {number} [durationSeconds]
  * @param {string} outputDir
+ * @param {number} [targetBytes] Target segment size in bytes
  * @returns {Promise<string[]>}
  */
-async function splitVideoToFitTelegram(inputPath, currentSizeBytes, durationSeconds, outputDir) {
-  const targetBytes = 46 * 1024 * 1024; // 46 MB target per segment for safe margin under 50 MB
+async function splitVideoToFitTelegram(
+  inputPath,
+  currentSizeBytes,
+  durationSeconds,
+  outputDir,
+  targetBytes = 46 * 1024 * 1024,
+) {
   if (currentSizeBytes <= targetBytes) {
     return [inputPath];
   }
@@ -93,7 +99,8 @@ async function splitVideoToFitTelegram(inputPath, currentSizeBytes, durationSeco
     Math.floor((targetBytes / currentSizeBytes) * duration * 0.95),
   );
 
-  const segmentTemplate = path.join(outputDir, 'part_%03d.mp4');
+  const ext = path.extname(inputPath) || '.mp4';
+  const segmentTemplate = path.join(outputDir, `part_%03d${ext}`);
   const ffmpegArgs = [
     '-y',
     '-i',
@@ -120,7 +127,7 @@ async function splitVideoToFitTelegram(inputPath, currentSizeBytes, durationSeco
       try {
         const parts = fs
           .readdirSync(outputDir)
-          .filter((f) => f.startsWith('part_') && f.endsWith('.mp4'))
+          .filter((f) => f.startsWith('part_') && f.endsWith(ext))
           .sort()
           .map((f) => path.join(outputDir, f));
 
@@ -310,13 +317,20 @@ async function main() {
               parse_mode: 'Markdown',
             });
           } else {
-            // Video: if > 50 MB and using standard Telegram cloud API, split into parts
-            if (result.fileSizeBytes > 50 * 1024 * 1024 && !config.telegram.apiBaseUrl) {
+            // Determine maximum single-file upload size allowed by Telegram:
+            // Local Bot API allows up to 2000 MB (safe target: 1950 MB).
+            // Cloud Bot API allows up to 50 MB (safe target: 46 MB).
+            const maxVideoPartBytes = config.telegram.apiBaseUrl
+              ? 1950 * 1024 * 1024
+              : 46 * 1024 * 1024;
+
+            if (result.fileSizeBytes > maxVideoPartBytes) {
               const parts = await splitVideoToFitTelegram(
                 result.filePath,
                 result.fileSizeBytes,
                 result.actualDuration,
                 path.dirname(result.filePath),
+                maxVideoPartBytes,
               );
 
               if (parts.length > 1) {
@@ -341,7 +355,7 @@ async function main() {
                 }
               } else {
                 throw new Error(
-                  `حجم الفيديو (${formattedSize}) يتجاوز الحد الأقصى المسموح به للبوتات في تيليجرام (50 ميجابايت). يمكنك اختيار دقة أقل (مثل 480p أو 360p أو صوت فقط MP3).`,
+                  `حجم الفيديو (${formattedSize}) يتجاوز الحد الأقصى المسموح به للبوتات في تيليجرام (${formatBytes(maxVideoPartBytes)}). يمكنك اختيار دقة أقل (مثل 720p أو 480p أو صوت فقط MP3).`,
                 );
               }
             } else {

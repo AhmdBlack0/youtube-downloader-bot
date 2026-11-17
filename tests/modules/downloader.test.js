@@ -31,6 +31,12 @@ describe('Downloader Engine (downloader.js)', () => {
       expect(args).toContain('mp4');
       expect(args).toContain('--write-thumbnail');
       expect(args).toContain('--embed-metadata');
+      expect(args).toContain('--http-chunk-size');
+      expect(args).toContain('10M');
+      expect(args).toContain('--concurrent-fragments');
+      expect(args).toContain('16');
+      expect(args).toContain('--throttled-rate');
+      expect(args).toContain('100K');
 
       const dashDashIndex = args.indexOf('--');
       expect(dashDashIndex).toBeGreaterThan(-1);

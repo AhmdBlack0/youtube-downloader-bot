@@ -64,9 +64,9 @@ const envSchema = z.object({
   MAX_CONCURRENT_JOBS: z.coerce.number().int().positive().default(2),
   MAX_JOBS_PER_USER_PER_DAY: z.coerce.number().int().min(0).default(0), // 0 = unlimited
   MAX_PLAYLIST_ITEMS: z.coerce.number().int().min(0).default(0), // 0 = unlimited
-  MAX_VIDEO_DURATION_SECONDS: z.coerce.number().int().positive().default(7200),
-  MAX_FILE_SIZE_BYTES: z.coerce.number().int().positive().default(2_147_483_648), // 2 GB
-  JOB_TIMEOUT_SECONDS: z.coerce.number().int().positive().default(1800), // 30 min
+  MAX_VIDEO_DURATION_SECONDS: z.coerce.number().int().min(0).default(0), // 0 = unlimited
+  MAX_FILE_SIZE_BYTES: z.coerce.number().int().positive().default(10_737_418_240), // 10 GB
+  JOB_TIMEOUT_SECONDS: z.coerce.number().int().positive().default(7200), // 2 hours
   MIN_DISK_SPACE_BYTES: z.coerce.number().int().positive().default(1_073_741_824), // 1 GB
   DOWNLOAD_DIR: z.string().default('./downloads'),
 

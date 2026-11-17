@@ -151,9 +151,10 @@ function registerUrlHandlers(bot) {
       const [user, metadata] = await Promise.all([userPromise, metadataPromise]);
       const userId = user.id;
 
-      // 4. Validate duration limit for single videos
+      // 4. Validate duration limit for single videos (0 = unlimited)
       if (
         metadata.kind === 'VIDEO' &&
+        config.limits.maxVideoDurationSeconds > 0 &&
         metadata.duration &&
         metadata.duration > config.limits.maxVideoDurationSeconds
       ) {

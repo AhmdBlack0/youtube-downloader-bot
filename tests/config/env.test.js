@@ -110,8 +110,8 @@ describe('Config validation (env.js)', () => {
     const { config } = loadConfigWith(validEnv);
     expect(config.limits.maxConcurrentJobs).toBe(2);
     expect(config.limits.maxPlaylistItems).toBe(0);
-    expect(config.limits.maxVideoDurationSeconds).toBe(7200);
-    expect(config.limits.maxFileSizeBytes).toBe(2_147_483_648);
+    expect(config.limits.maxVideoDurationSeconds).toBe(0);
+    expect(config.limits.maxFileSizeBytes).toBe(10_737_418_240);
   });
 
   test('missing BOT_TOKEN → process.exit(1)', () => {
