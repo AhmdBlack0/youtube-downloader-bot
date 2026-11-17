@@ -77,6 +77,28 @@ async function applyCustomIndexes(prismaClient = prisma) {
     ON "Job" ("userId")
     WHERE status IN ('QUEUED', 'RUNNING');
   `);
+
+  await prismaClient.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "MediaCache" (
+      "id" SERIAL PRIMARY KEY,
+      "youtubeId" TEXT NOT NULL,
+      "quality" TEXT NOT NULL,
+      "fileId" TEXT NOT NULL,
+      "fileUniqueId" TEXT,
+      "title" TEXT,
+      "performer" TEXT,
+      "duration" INTEGER,
+      "fileSizeBytes" BIGINT,
+      "mimeType" TEXT,
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  await prismaClient.$executeRawUnsafe(`
+    CREATE UNIQUE INDEX IF NOT EXISTS "MediaCache_youtubeId_quality_key"
+    ON "MediaCache" ("youtubeId", "quality");
+  `);
 }
 
 module.exports = { prisma, applyCustomIndexes };

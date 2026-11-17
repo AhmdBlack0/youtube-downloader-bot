@@ -33,6 +33,7 @@ const {
 } = require('../keyboards/quality');
 const { formatDuration, getArabicErrorMessage } = require('../../utils/format');
 const { prisma } = require('../../modules/db');
+const { getCachedMedia } = require('../../modules/mediaCache');
 
 /**
  * Register URL and callback query handlers on the bot.
@@ -296,6 +297,57 @@ function registerUrlHandlers(bot) {
     const qualityLabel = quality === 'mp3' ? 'صوت فقط (MP3)' : `${quality}p`;
 
     try {
+      // ⚡ INSTANT DELIVERY CHECK: Check if this video is already cached in Telegram
+      if (pending.kind === 'VIDEO') {
+        const parsed = parseYouTubeUrl(pending.url);
+        const videoId = parsed.id;
+        if (videoId) {
+          const cached = await getCachedMedia(videoId, quality);
+          if (cached && cached.fileId && ctx.chat?.id) {
+            await ctx.answerCallbackQuery({
+              text: '⚡ تم العثور على الملف في الذاكرة السحابية! جاري الإرسال الفوري...',
+            });
+
+            await ctx.editMessageText(
+              '⚡ *جاري الإرسال الفوري من الذاكرة السحابية (خلال ثانية واحدة)...*',
+              {
+                parse_mode: 'Markdown',
+              },
+            );
+
+            const chatId = ctx.chat.id;
+            const mediaTitle = cached.title || pending.title || 'فيديو';
+            const durationSeconds = cached.duration || pending.duration || undefined;
+            let caption = `🎬 *${escapeMarkdown(mediaTitle)}*`;
+            if (durationSeconds) {
+              caption += `\n⏱️ _المدة: ${formatDuration(durationSeconds)}_`;
+            }
+            caption += `\n\n⚡ _تم التسليم الفوري من الذاكرة السحابية خلال ثانية واحدة!_`;
+
+            if (quality === 'mp3') {
+              await bot.api.sendAudio(chatId, cached.fileId, {
+                caption,
+                title: mediaTitle,
+                performer: cached.performer || 'YouTube',
+                duration: durationSeconds,
+                parse_mode: 'Markdown',
+              });
+            } else {
+              await bot.api.sendVideo(chatId, cached.fileId, {
+                caption,
+                duration: durationSeconds,
+                supports_streaming: true,
+                parse_mode: 'Markdown',
+              });
+            }
+
+            await ctx.editMessageText('✅ *تم إرسال الملف بنجاح في أقل من ثانية!* ⚡', {
+              parse_mode: 'Markdown',
+            });
+            return;
+          }
+        }
+      }
       // Prepare items records for both PLAYLIST and single VIDEO
       const maxItems =
         config.limits.maxPlaylistItems > 0 ? config.limits.maxPlaylistItems : Infinity;

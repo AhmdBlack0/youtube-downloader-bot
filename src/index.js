@@ -16,6 +16,8 @@ const { Worker } = require('./worker');
 const { getYtDlpVersion } = require('./modules/downloads/ytdlp');
 const { escapeMarkdown } = require('./bot/handlers/url');
 const { formatBytes, formatDuration } = require('./utils/format');
+const { parseYouTubeUrl } = require('./utils/url');
+const { saveCachedMedia } = require('./modules/mediaCache');
 
 /**
  * Re-encode oversized audio using FFmpeg to guarantee it fits under Telegram's 50 MB cloud Bot API limit.
@@ -200,43 +202,85 @@ async function main() {
       }, 4000);
 
       try {
+        let sentMsg;
         if (job.quality === 'mp3') {
-          let uploadPath = result.filePath;
-          // If file is > 48 MB and standard Telegram cloud API is used, compress with ffmpeg
-          if (result.fileSizeBytes > 48 * 1024 * 1024 && !config.telegram.apiBaseUrl) {
-            uploadPath = await compressAudioToFitTelegram(
-              result.filePath,
-              result.fileSizeBytes,
-              result.actualDuration,
-              mediaTitle,
+          if (result.cachedFileId) {
+            sentMsg = await bot.api.sendAudio(chatId, result.cachedFileId, {
+              caption,
+              title: mediaTitle,
               performer,
-            );
-          }
+              duration: durationSeconds,
+              parse_mode: 'Markdown',
+            });
+          } else {
+            let uploadPath = result.filePath;
+            // If file is > 48 MB and standard Telegram cloud API is used, compress with ffmpeg
+            if (result.fileSizeBytes > 48 * 1024 * 1024 && !config.telegram.apiBaseUrl) {
+              uploadPath = await compressAudioToFitTelegram(
+                result.filePath,
+                result.fileSizeBytes,
+                result.actualDuration,
+                mediaTitle,
+                performer,
+              );
+            }
 
-          await bot.api.sendAudio(chatId, new InputFile(uploadPath), {
-            caption,
-            title: mediaTitle,
-            performer,
-            duration: durationSeconds,
-            parse_mode: 'Markdown',
-          });
+            sentMsg = await bot.api.sendAudio(chatId, new InputFile(uploadPath), {
+              caption,
+              title: mediaTitle,
+              performer,
+              duration: durationSeconds,
+              parse_mode: 'Markdown',
+            });
+          }
         } else {
-          // Video: if > 50 MB and using standard Telegram cloud API, notify user clearly
-          if (result.fileSizeBytes > 50 * 1024 * 1024 && !config.telegram.apiBaseUrl) {
-            throw new Error(
-              `حجم الفيديو (${formattedSize}) يتجاوز الحد الأقصى المسموح به للبوتات في تيليجرام (50 ميجابايت). يمكنك اختيار دقة أقل (مثل 480p أو 360p أو صوت فقط MP3).`,
-            );
-          }
+          if (result.cachedFileId) {
+            sentMsg = await bot.api.sendVideo(chatId, result.cachedFileId, {
+              caption,
+              duration: durationSeconds,
+              supports_streaming: true,
+              parse_mode: 'Markdown',
+            });
+          } else {
+            // Video: if > 50 MB and using standard Telegram cloud API, notify user clearly
+            if (result.fileSizeBytes > 50 * 1024 * 1024 && !config.telegram.apiBaseUrl) {
+              throw new Error(
+                `حجم الفيديو (${formattedSize}) يتجاوز الحد الأقصى المسموح به للبوتات في تيليجرام (50 ميجابايت). يمكنك اختيار دقة أقل (مثل 480p أو 360p أو صوت فقط MP3).`,
+              );
+            }
 
-          await bot.api.sendVideo(chatId, new InputFile(result.filePath), {
-            caption,
-            duration: result.actualDuration || undefined,
-            width: result.actualWidth || undefined,
-            height: result.actualHeight || undefined,
-            thumbnail: result.thumbnailPath ? new InputFile(result.thumbnailPath) : undefined,
-            supports_streaming: true,
-            parse_mode: 'Markdown',
-          });
+            sentMsg = await bot.api.sendVideo(chatId, new InputFile(result.filePath), {
+              caption,
+              duration: result.actualDuration || undefined,
+              width: result.actualWidth || undefined,
+              height: result.actualHeight || undefined,
+              thumbnail: result.thumbnailPath ? new InputFile(result.thumbnailPath) : undefined,
+              supports_streaming: true,
+              parse_mode: 'Markdown',
+            });
+          }
+        }
+
+        // Cache the newly delivered media file for future 1-second instant downloads
+        if (sentMsg && !result.cachedFileId) {
+          const parsedUrl = parseYouTubeUrl(item.videoUrl || job.url);
+          const youtubeId = parsedUrl.id;
+          if (youtubeId) {
+            const fileObj = sentMsg.audio || sentMsg.video;
+            if (fileObj?.file_id) {
+              saveCachedMedia({
+                youtubeId,
+                quality: job.quality,
+                fileId: fileObj.file_id,
+                fileUniqueId: fileObj.file_unique_id,
+                title: mediaTitle,
+                performer,
+                duration: durationSeconds || fileObj.duration,
+                fileSizeBytes: fileObj.file_size || result.fileSizeBytes,
+                mimeType: fileObj.mime_type,
+              }).catch(() => {});
+            }
+          }
         }
       } catch (err) {
         logger.error(

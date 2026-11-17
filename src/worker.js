@@ -26,6 +26,8 @@ const {
 } = require('./modules/jobs/jobService');
 const { downloadVideo } = require('./modules/downloads/downloader');
 const { createProgressThrottler } = require('./utils/progressThrottle');
+const { parseYouTubeUrl } = require('./utils/url');
+const { getCachedMedia } = require('./modules/mediaCache');
 
 class Worker {
   /**
@@ -240,13 +242,44 @@ class Worker {
           break;
         }
 
-        // 2. Mark current item as DOWNLOADING
+        // 2. Check cache for this item
+        const parsedItem = parseYouTubeUrl(item.videoUrl || job.url);
+        const itemYtId = parsedItem.id;
+        const cachedItem = itemYtId ? await getCachedMedia(itemYtId, job.quality) : null;
+        if (cachedItem && cachedItem.fileId) {
+          jobLogger.info(
+            { itemId: item.id, youtubeId: itemYtId },
+            '⚡ Item cache HIT, delivering instantly',
+          );
+          await prisma.jobItem.update({
+            where: { id: item.id },
+            data: {
+              status: 'DONE',
+              fileSizeBytes: cachedItem.fileSizeBytes || null,
+            },
+          });
+          anySucceeded = true;
+          if (this.onItemComplete) {
+            await this.onItemComplete(job, item, {
+              filePath: '',
+              cachedFileId: cachedItem.fileId,
+              fileSizeBytes: Number(cachedItem.fileSizeBytes || 0),
+              actualDuration: cachedItem.duration || null,
+              title: cachedItem.title || item.title,
+              uploader: cachedItem.performer || 'YouTube',
+              isFallback: false,
+            });
+          }
+          continue;
+        }
+
+        // 3. Mark current item as DOWNLOADING
         await prisma.jobItem.update({
           where: { id: item.id },
           data: { status: 'DOWNLOADING' },
         });
 
-        // 3. Isolated temp directory for this item
+        // 4. Isolated temp directory for this item
         const itemDir = path.join(config.downloadDir, `job-${job.id}-item-${item.id}`);
         await fs.promises.mkdir(itemDir, { recursive: true });
 

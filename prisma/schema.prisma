@@ -130,3 +130,23 @@ enum JobItemStatus {
   FAILED
   SKIPPED
 }
+
+/// Cached Telegram media files for instant delivery (sub-second response).
+/// Maps YouTube video ID + quality to Telegram's unique file_id.
+model MediaCache {
+  id            Int      @id @default(autoincrement())
+  youtubeId     String
+  quality       String
+  fileId        String
+  fileUniqueId  String?
+  title         String?
+  performer     String?
+  duration      Int?
+  fileSizeBytes BigInt?
+  mimeType      String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([youtubeId, quality])
+  @@index([youtubeId])
+}
