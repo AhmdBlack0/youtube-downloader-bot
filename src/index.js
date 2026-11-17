@@ -9,6 +9,8 @@
 
 const { InputFile } = require('grammy');
 const { execFile } = require('child_process');
+const fs = require('fs');
+const path = require('path');
 const { config, logger } = require('./config');
 const { createBot } = require('./bot');
 const { prisma, applyCustomIndexes } = require('./modules/db');
@@ -59,10 +61,76 @@ async function compressAudioToFitTelegram(
   return new Promise((resolve) => {
     // -ac 1 converts to mono to preserve clarity at lower bitrates
     execFile('ffmpeg', ffmpegArgs, (err) => {
-      if (err || !require('fs').existsSync(outputPath)) {
+      if (err || !fs.existsSync(outputPath)) {
         resolve(inputPath);
       } else {
         resolve(outputPath);
+      }
+    });
+  });
+}
+
+/**
+ * Split oversized video into < 48 MB segments using FFmpeg stream copy (-c copy).
+ * Zero re-encoding, preserves 100% original quality, executes in seconds.
+ *
+ * @param {string} inputPath
+ * @param {number} currentSizeBytes
+ * @param {number} [durationSeconds]
+ * @param {string} outputDir
+ * @returns {Promise<string[]>}
+ */
+async function splitVideoToFitTelegram(inputPath, currentSizeBytes, durationSeconds, outputDir) {
+  const targetBytes = 46 * 1024 * 1024; // 46 MB target per segment for safe margin under 50 MB
+  if (currentSizeBytes <= targetBytes) {
+    return [inputPath];
+  }
+
+  const duration = durationSeconds && durationSeconds > 0 ? durationSeconds : 3600;
+  // Calculate duration per segment proportional to size
+  const segmentDuration = Math.max(
+    10,
+    Math.floor((targetBytes / currentSizeBytes) * duration * 0.95),
+  );
+
+  const segmentTemplate = path.join(outputDir, 'part_%03d.mp4');
+  const ffmpegArgs = [
+    '-y',
+    '-i',
+    inputPath,
+    '-c',
+    'copy',
+    '-map',
+    '0',
+    '-segment_time',
+    String(segmentDuration),
+    '-f',
+    'segment',
+    '-reset_timestamps',
+    '1',
+    segmentTemplate,
+  ];
+
+  return new Promise((resolve) => {
+    execFile('ffmpeg', ffmpegArgs, (err) => {
+      if (err) {
+        resolve([inputPath]);
+        return;
+      }
+      try {
+        const parts = fs
+          .readdirSync(outputDir)
+          .filter((f) => f.startsWith('part_') && f.endsWith('.mp4'))
+          .sort()
+          .map((f) => path.join(outputDir, f));
+
+        if (parts.length > 0) {
+          resolve(parts);
+        } else {
+          resolve([inputPath]);
+        }
+      } catch {
+        resolve([inputPath]);
       }
     });
   });
@@ -242,22 +310,51 @@ async function main() {
               parse_mode: 'Markdown',
             });
           } else {
-            // Video: if > 50 MB and using standard Telegram cloud API, notify user clearly
+            // Video: if > 50 MB and using standard Telegram cloud API, split into parts
             if (result.fileSizeBytes > 50 * 1024 * 1024 && !config.telegram.apiBaseUrl) {
-              throw new Error(
-                `حجم الفيديو (${formattedSize}) يتجاوز الحد الأقصى المسموح به للبوتات في تيليجرام (50 ميجابايت). يمكنك اختيار دقة أقل (مثل 480p أو 360p أو صوت فقط MP3).`,
+              const parts = await splitVideoToFitTelegram(
+                result.filePath,
+                result.fileSizeBytes,
+                result.actualDuration,
+                path.dirname(result.filePath),
               );
-            }
 
-            sentMsg = await bot.api.sendVideo(chatId, new InputFile(result.filePath), {
-              caption,
-              duration: result.actualDuration || undefined,
-              width: result.actualWidth || undefined,
-              height: result.actualHeight || undefined,
-              thumbnail: result.thumbnailPath ? new InputFile(result.thumbnailPath) : undefined,
-              supports_streaming: true,
-              parse_mode: 'Markdown',
-            });
+              if (parts.length > 1) {
+                for (let i = 0; i < parts.length; i++) {
+                  const partPath = parts[i];
+                  const partStats = fs.statSync(partPath);
+                  const partSize = formatBytes(partStats.size);
+                  const partCaption =
+                    `🎬 *${escapeMarkdown(mediaTitle)}*\n` +
+                    `📦 *الجزء (${i + 1} من ${parts.length})* • ${partSize}\n` +
+                    `⏱️ *المدة:* ${formatDuration(durationSeconds)}`;
+
+                  sentMsg = await bot.api.sendVideo(chatId, new InputFile(partPath), {
+                    caption: partCaption,
+                    supports_streaming: true,
+                    parse_mode: 'Markdown',
+                    thumbnail:
+                      result.thumbnailPath && i === 0
+                        ? new InputFile(result.thumbnailPath)
+                        : undefined,
+                  });
+                }
+              } else {
+                throw new Error(
+                  `حجم الفيديو (${formattedSize}) يتجاوز الحد الأقصى المسموح به للبوتات في تيليجرام (50 ميجابايت). يمكنك اختيار دقة أقل (مثل 480p أو 360p أو صوت فقط MP3).`,
+                );
+              }
+            } else {
+              sentMsg = await bot.api.sendVideo(chatId, new InputFile(result.filePath), {
+                caption,
+                duration: result.actualDuration || undefined,
+                width: result.actualWidth || undefined,
+                height: result.actualHeight || undefined,
+                thumbnail: result.thumbnailPath ? new InputFile(result.thumbnailPath) : undefined,
+                supports_streaming: true,
+                parse_mode: 'Markdown',
+              });
+            }
           }
         }
 
