@@ -120,11 +120,14 @@ function buildDownloadArgs(quality, jobDir, targetUrl, options = {}) {
 
   const height = parseInt(quality, 10);
   // Format selector with cascade fallback:
-  // 1. Best video at or below requested height + best audio in MP4/M4A (fastest mux, highest quality)
-  // 2. Best video at or below requested height + best audio
-  // 3. Pre-merged single stream at or below requested height
-  // 4. Any best available video+audio or stream fallback
-  const formatSelector = `bv*[height<=${height}][ext=mp4]+ba[ext=m4a]/bv*[height<=${height}]+ba/b[height<=${height}]/bv*+ba/b/best`;
+  // 1. Best video at or below requested height that fits under Telegram's single-file limit (1800M) + best audio in MP4/M4A
+  // 2. Best video at or below requested height that fits under single-file limit + best audio
+  // 3. Best video at or below requested height + best audio in MP4/M4A
+  // 4. Best video at or below requested height + best audio
+  // 5. Pre-merged single stream at or below requested height
+  // 6. Any best available video+audio or stream fallback
+  const maxVid = '1800M';
+  const formatSelector = `bv*[height<=${height}][filesize<${maxVid}][ext=mp4]+ba[ext=m4a]/bv*[height<=${height}][filesize_approx<${maxVid}][ext=mp4]+ba[ext=m4a]/bv*[height<=${height}][filesize<${maxVid}]+ba/bv*[height<=${height}][filesize_approx<${maxVid}]+ba/bv*[height<=${height}][ext=mp4]+ba[ext=m4a]/bv*[height<=${height}]+ba/b[height<=${height}]/bv*+ba/b/best`;
 
   return [
     ...commonArgs,
