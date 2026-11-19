@@ -30,6 +30,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     aria2 \
     python3 \
     python3-pip \
+    curl \
+    unzip \
+    && curl -fsSL https://deno.land/install.sh | sh -s -- -y --to /usr/local/bin \
     && pip3 install --break-system-packages -U "yt-dlp[default]" \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*

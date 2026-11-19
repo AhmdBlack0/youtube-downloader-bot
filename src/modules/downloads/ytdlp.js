@@ -96,6 +96,18 @@ function classifyYtDlpError(stderr) {
     };
   }
 
+  if (
+    lower.includes('requested format is not available') ||
+    lower.includes('only images are available') ||
+    lower.includes('sabr-only streaming') ||
+    lower.includes('n challenge solving failed')
+  ) {
+    return {
+      code: 'FORMAT_NOT_AVAILABLE',
+      message: 'Requested format is not available or restricted by YouTube SABR experiment',
+    };
+  }
+
   if (lower.includes('private video') || lower.includes('this video is private')) {
     return { code: 'PRIVATE_VIDEO', message: 'This video or playlist is private' };
   }
@@ -152,7 +164,7 @@ async function getMetadata(targetUrl, options = {}) {
     '--extractor-args',
     'youtube:player-client=android,web,default',
     '--js-runtimes',
-    'node',
+    'deno,node',
     '--remote-components',
     'ejs:github',
   ];
@@ -211,6 +223,33 @@ async function getMetadata(targetUrl, options = {}) {
 
       if (code !== 0) {
         const classified = classifyYtDlpError(stderrData);
+        const usedCookies =
+          options.cookiesPath === null ? undefined : options.cookiesPath || getDefaultCookiesPath();
+        const isSABROrFormatError =
+          classified.code === 'FORMAT_NOT_AVAILABLE' ||
+          stderrData.toLowerCase().includes('requested format is not available') ||
+          stderrData.toLowerCase().includes('only images are available') ||
+          stderrData.toLowerCase().includes('sabr-only streaming');
+
+        if (
+          usedCookies &&
+          !options.retriedWithoutCookies &&
+          (classified.code === 'BOT_VERIFICATION_REQUIRED' || isSABROrFormatError)
+        ) {
+          logger.warn(
+            { targetUrl, code: classified.code },
+            'Metadata extraction failed with cookies (SABR restriction or session error). Retrying once without cookies...',
+          );
+          getMetadata(targetUrl, {
+            ...options,
+            cookiesPath: null,
+            retriedWithoutCookies: true,
+          })
+            .then(resolve)
+            .catch(reject);
+          return;
+        }
+
         reject(new YtDlpError(classified.message, classified.code, stderrData));
         return;
       }

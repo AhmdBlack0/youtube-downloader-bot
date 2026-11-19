@@ -189,6 +189,7 @@ describe('yt-dlp Wrapper (ytdlp.js)', () => {
 
       const promise = getMetadata('https://www.youtube.com/watch?v=botcheck123', {
         binaryPath: 'yt-dlp',
+        cookiesPath: null,
       });
 
       fakeChild.stderr.emit(

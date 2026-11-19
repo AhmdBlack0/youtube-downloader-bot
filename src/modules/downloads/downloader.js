@@ -79,7 +79,7 @@ function buildDownloadArgs(quality, jobDir, targetUrl, options = {}) {
     '--extractor-args',
     'youtube:player-client=android,web,default',
     '--js-runtimes',
-    'node',
+    'deno,node',
     '--remote-components',
     'ejs:github',
     '--http-chunk-size',
@@ -268,14 +268,21 @@ async function downloadVideo({
         const classified = classifyYtDlpError(stderrData);
         const usedCookies =
           cookiesPath === null ? undefined : cookiesPath || getDefaultCookiesPath();
+        const isSABROrFormatError =
+          classified.code === 'FORMAT_NOT_AVAILABLE' ||
+          stderrData.toLowerCase().includes('requested format is not available') ||
+          stderrData.toLowerCase().includes('only images are available') ||
+          stderrData.toLowerCase().includes('sabr-only streaming') ||
+          stderrData.toLowerCase().includes('n challenge solving failed');
+
         if (
-          classified.code === 'BOT_VERIFICATION_REQUIRED' &&
           usedCookies &&
-          !retriedWithoutCookies
+          !retriedWithoutCookies &&
+          (classified.code === 'BOT_VERIFICATION_REQUIRED' || isSABROrFormatError)
         ) {
           logger.warn(
-            { url },
-            'Bot verification required with cookies (session may be expired). Retrying once without cookies...',
+            { url, code: classified.code },
+            'Download failed with cookies (SABR restriction, format issue, or session error). Retrying once without cookies...',
           );
           downloadVideo({
             url,
