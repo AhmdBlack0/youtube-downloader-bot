@@ -163,7 +163,7 @@ async function getMetadata(targetUrl, options = {}) {
     '--skip-download',
     '--force-ipv4', // Prevent cloud datacenter IPv6 blocking by YouTube
     '--extractor-args',
-    'youtube:player-client=visionos,android,web,default',
+    'youtube:player-client=tv,visionos,android,web,default',
     '--js-runtimes',
     'deno,node',
     '--remote-components',
