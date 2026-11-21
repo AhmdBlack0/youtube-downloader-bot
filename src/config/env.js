@@ -74,6 +74,9 @@ const envSchema = z.object({
   COOKIES_PATH: z.string().optional(),
   COOKIES_CONTENT: z.string().optional(),
 
+  // Optional Proxy for bypassing cloud/datacenter IP blocks (HTTP/SOCKS5)
+  PROXY_URL: z.string().url().optional(),
+
   // Node env
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
 });
@@ -180,6 +183,9 @@ const config = Object.freeze({
   },
   downloadDir: path.resolve(parsed.data.DOWNLOAD_DIR),
   cookiesPath: resolvedCookiesPath,
+  network: {
+    proxyUrl: parsed.data.PROXY_URL || process.env.HTTP_PROXY || process.env.HTTPS_PROXY,
+  },
   nodeEnv: parsed.data.NODE_ENV,
 });
 

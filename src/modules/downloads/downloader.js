@@ -76,8 +76,9 @@ function buildDownloadArgs(quality, jobDir, targetUrl, options = {}) {
     '--no-check-certificates',
     '--no-warnings',
     '--no-mtime', // Skip writing file modification times for faster I/O
+    '--force-ipv4', // Prevent cloud datacenter IPv6 blocking by YouTube
     '--extractor-args',
-    'youtube:player-client=android,web,default',
+    'youtube:player-client=android,ios,web,default',
     '--js-runtimes',
     'deno,node',
     '--remote-components',
@@ -100,6 +101,11 @@ function buildDownloadArgs(quality, jobDir, targetUrl, options = {}) {
     '-o',
     outputTemplate,
   ];
+
+  const proxy = options.proxyUrl || process.env.PROXY_URL || process.env.HTTP_PROXY;
+  if (proxy) {
+    commonArgs.push('--proxy', proxy);
+  }
 
   if (cookies && fs.existsSync(cookies)) {
     commonArgs.push('--cookies', cookies);

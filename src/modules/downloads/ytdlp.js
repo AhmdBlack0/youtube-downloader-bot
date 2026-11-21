@@ -161,13 +161,19 @@ async function getMetadata(targetUrl, options = {}) {
     '--no-check-certificates',
     '--no-check-formats', // Skip probing format URLs to accelerate metadata extraction
     '--skip-download',
+    '--force-ipv4', // Prevent cloud datacenter IPv6 blocking by YouTube
     '--extractor-args',
-    'youtube:player-client=android,web,default',
+    'youtube:player-client=android,ios,web,default',
     '--js-runtimes',
     'deno,node',
     '--remote-components',
     'ejs:github',
   ];
+
+  const proxy = options.proxyUrl || process.env.PROXY_URL || process.env.HTTP_PROXY;
+  if (proxy) {
+    commonArgs.push('--proxy', proxy);
+  }
 
   if (cookies && fs.existsSync(cookies)) {
     commonArgs.push('--cookies', cookies);

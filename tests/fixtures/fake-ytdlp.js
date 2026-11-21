@@ -38,7 +38,7 @@ else {
     targetUrl.includes('simulate-oversize') || targetUrl.includes('playlist_item_4');
 
   if (isOversize) {
-    const fileSize = 3 * 1024 * 1024 * 1024; // 3 GB (> 2GB limit)
+    const fileSize = 11 * 1024 * 1024 * 1024; // 11 GB (> 10GB limit)
     const fd = fs.openSync(filePath, 'w');
     fs.ftruncateSync(fd, fileSize);
     fs.closeSync(fd);
