@@ -78,7 +78,7 @@ function buildDownloadArgs(quality, jobDir, targetUrl, options = {}) {
     '--no-mtime', // Skip writing file modification times for faster I/O
     '--force-ipv4', // Prevent cloud datacenter IPv6 blocking by YouTube
     '--extractor-args',
-    'youtube:player-client=mweb,ios,visionos,tv,android,web,default',
+    'youtube:player-client=visionos,android,web,default',
     '--js-runtimes',
     'deno,node',
     '--remote-components',
